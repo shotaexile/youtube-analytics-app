@@ -1,14 +1,14 @@
 import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { parseVideoData, formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
-import { VideoData } from "@/lib/data/types";
+import { VideoData, VideoFilter } from "@/lib/data/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
-type SortType = 'date' | 'views' | 'revenue' | 'ctr' | 'likeRate';
+type SortType = 'date' | 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers';
 
 const SORT_OPTIONS: { key: SortType; label: string }[] = [
   { key: 'date', label: '新しい順' },
@@ -16,6 +16,14 @@ const SORT_OPTIONS: { key: SortType; label: string }[] = [
   { key: 'revenue', label: '収益' },
   { key: 'ctr', label: 'CTR' },
   { key: 'likeRate', label: '高評価率' },
+  { key: 'subscribers', label: '登録者増減' },
+];
+
+const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
+  { key: 'all', label: 'すべて', color: '#606060' },
+  { key: 'regular', label: '一般動画', color: '#FF0000' },
+  { key: 'short', label: 'ショート', color: '#3B82F6' },
+  { key: 'private', label: '非公開', color: '#9CA3AF' },
 ];
 
 const GRADE_COLORS: Record<string, string> = {
@@ -45,25 +53,43 @@ function VideoCard({ video }: { video: VideoData }) {
         shadowRadius: 6,
         elevation: 1,
         gap: 10,
+        opacity: video.isPrivate ? 0.7 : 1,
       }}
     >
-      <Image
-        source={{ uri: thumbnailUrl }}
-        style={{ width: 100, height: 56, borderRadius: 8, backgroundColor: '#F3F4F6' }}
-        contentFit="cover"
-      />
+      <View style={{ position: 'relative' }}>
+        <Image
+          source={{ uri: thumbnailUrl }}
+          style={{ width: 100, height: 56, borderRadius: 8, backgroundColor: '#F3F4F6' }}
+          contentFit="cover"
+        />
+        {video.isShort && (
+          <View style={{ position: 'absolute', bottom: 3, left: 3, backgroundColor: '#3B82F6', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 8, color: 'white', fontWeight: '700' }}>SHORT</Text>
+          </View>
+        )}
+        {video.isPrivate && (
+          <View style={{ position: 'absolute', bottom: 3, left: 3, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 8, color: 'white', fontWeight: '700' }}>非公開</Text>
+          </View>
+        )}
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 13, fontWeight: '600', color: '#0F0F0F', marginBottom: 6, lineHeight: 18 }} numberOfLines={2}>{video.title}</Text>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <Text style={{ fontSize: 11, color: '#606060' }}>視聴 {formatNumber(video.views)}</Text>
+          <Text style={{ fontSize: 11, color: '#606060' }}>👁 {formatNumber(video.views)}</Text>
           {video.estimatedRevenue > 0 && (
             <Text style={{ fontSize: 11, color: '#22C55E' }}>{formatRevenue(video.estimatedRevenue)}</Text>
           )}
           <Text style={{ fontSize: 11, color: '#606060' }}>CTR {video.ctr.toFixed(1)}%</Text>
+          {video.subscriberChange !== 0 && (
+            <Text style={{ fontSize: 11, color: video.subscriberChange > 0 ? '#22C55E' : '#EF4444' }}>
+              {video.subscriberChange > 0 ? `+${video.subscriberChange}` : video.subscriberChange}人
+            </Text>
+          )}
         </View>
         <Text style={{ fontSize: 10, color: '#AAAAAA', marginTop: 4 }}>{video.publishedAt}</Text>
       </View>
-      <View style={{ alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+      <View style={{ alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}>
         <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: GRADE_COLORS[grade] + '20', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 14, fontWeight: '800', color: GRADE_COLORS[grade] }}>{grade}</Text>
         </View>
@@ -74,18 +100,44 @@ function VideoCard({ video }: { video: VideoData }) {
 }
 
 export default function VideosScreen() {
+  const params = useLocalSearchParams<{ grade?: string; filter?: VideoFilter }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortType, setSortType] = useState<SortType>('date');
   const [showSearch, setShowSearch] = useState(false);
+  const [videoFilter, setVideoFilter] = useState<VideoFilter>(params.filter || 'all');
+  const [gradeFilter, setGradeFilter] = useState<string | null>(params.grade || null);
 
   const allVideos = useMemo(() => parseVideoData(), []);
 
+  const counts = useMemo(() => ({
+    all: allVideos.length,
+    regular: allVideos.filter(v => !v.isShort && !v.isPrivate).length,
+    short: allVideos.filter(v => v.isShort).length,
+    private: allVideos.filter(v => v.isPrivate).length,
+  }), [allVideos]);
+
   const filteredVideos = useMemo(() => {
     let videos = allVideos;
+
+    // Video type filter
+    if (videoFilter === 'regular') videos = videos.filter(v => !v.isShort && !v.isPrivate);
+    else if (videoFilter === 'short') videos = videos.filter(v => v.isShort);
+    else if (videoFilter === 'private') videos = videos.filter(v => v.isPrivate);
+
+    // Grade filter
+    if (gradeFilter) {
+      videos = videos.filter(v => {
+        const { grade } = calculatePerformanceScore(v);
+        return grade === gradeFilter;
+      });
+    }
+
+    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       videos = videos.filter(v => v.title.toLowerCase().includes(q));
     }
+
     return [...videos].sort((a, b) => {
       switch (sortType) {
         case 'date': return b.publishedDate.getTime() - a.publishedDate.getTime();
@@ -93,14 +145,16 @@ export default function VideosScreen() {
         case 'revenue': return b.estimatedRevenue - a.estimatedRevenue;
         case 'ctr': return b.ctr - a.ctr;
         case 'likeRate': return b.likeRate - a.likeRate;
+        case 'subscribers': return b.subscriberChange - a.subscriberChange;
         default: return 0;
       }
     });
-  }, [allVideos, searchQuery, sortType]);
+  }, [allVideos, searchQuery, sortType, videoFilter, gradeFilter]);
 
   return (
-    <ScreenContainer containerClassName="bg-background">
+    <ScreenContainer containerClassName="bg-[#F8F8F8]">
       <View style={{ backgroundColor: 'white', paddingTop: 16, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
+        {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10 }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F0F0F', flex: 1 }}>動画一覧</Text>
           <Text style={{ fontSize: 12, color: '#606060', marginRight: 12 }}>{filteredVideos.length}本</Text>
@@ -111,6 +165,8 @@ export default function VideosScreen() {
             <IconSymbol name="magnifyingglass" size={16} color={showSearch ? 'white' : '#606060'} />
           </TouchableOpacity>
         </View>
+
+        {/* Search Bar */}
         {showSearch && (
           <View style={{ marginHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 12, height: 36 }}>
             <IconSymbol name="magnifyingglass" size={14} color="#606060" />
@@ -129,6 +185,48 @@ export default function VideosScreen() {
             )}
           </View>
         )}
+
+        {/* Grade Filter Badge */}
+        {gradeFilter && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8, gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: GRADE_COLORS[gradeFilter] + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: GRADE_COLORS[gradeFilter] }}>グレード {gradeFilter}</Text>
+              <TouchableOpacity onPress={() => setGradeFilter(null)}>
+                <IconSymbol name="xmark" size={12} color={GRADE_COLORS[gradeFilter]} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Video Type Filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 12 }}>
+            {VIDEO_FILTERS.map(f => (
+              <TouchableOpacity
+                key={f.key}
+                onPress={() => setVideoFilter(f.key)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                  borderRadius: 16,
+                  backgroundColor: videoFilter === f.key ? f.color : '#F3F4F6',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '600', color: videoFilter === f.key ? 'white' : '#606060' }}>
+                  {f.label}
+                </Text>
+                <Text style={{ fontSize: 10, color: videoFilter === f.key ? 'rgba(255,255,255,0.8)' : '#9CA3AF' }}>
+                  {counts[f.key]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+
+        {/* Sort Options */}
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -138,13 +236,14 @@ export default function VideosScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               onPress={() => setSortType(item.key)}
-              style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: sortType === item.key ? '#FF0000' : '#F3F4F6' }}
+              style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, backgroundColor: sortType === item.key ? '#0F0F0F' : '#F3F4F6' }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: sortType === item.key ? 'white' : '#606060' }}>{item.label}</Text>
             </TouchableOpacity>
           )}
         />
       </View>
+
       <FlatList
         data={filteredVideos}
         keyExtractor={item => item.id}

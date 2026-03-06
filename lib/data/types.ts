@@ -3,26 +3,30 @@ export interface VideoData {
   title: string;
   publishedAt: string;
   duration: number; // seconds
-  likeRate: number; // percentage
-  avgViewDuration: string; // "HH:MM:SS"
-  avgViewDurationSeconds: number;
+  likeRate: number; // percentage (高評価率)
+  avgViewRate: number; // percentage (平均視聴率)
   views: number;
-  totalWatchHours: number;
-  subscribers: number;
+  subscriberChange: number; // チャンネル登録者増減
   estimatedRevenue: number; // JPY
   impressions: number;
   ctr: number; // percentage
   publishedDate: Date;
+  isShort: boolean; // 60秒以下 = ショート動画
+  isPrivate: boolean; // サムネイル取得不可 = 非公開/削除済み
 }
 
 export interface ChannelSummary {
   totalViews: number;
-  totalWatchHours: number;
   totalRevenue: number;
   totalImpressions: number;
   avgCtr: number;
   avgLikeRate: number;
+  avgViewRate: number;
+  totalSubscriberChange: number;
   videoCount: number;
+  shortCount: number;
+  regularCount: number;
+  privateCount: number;
 }
 
 export interface MonthlyStats {
@@ -30,7 +34,7 @@ export interface MonthlyStats {
   views: number;
   revenue: number;
   videoCount: number;
-  watchHours: number;
+  subscriberChange: number;
 }
 
 export interface PerformanceScore {
@@ -42,5 +46,6 @@ export interface PerformanceScore {
   ctrScore: number;
 }
 
-export type RankingType = 'views' | 'revenue' | 'watchHours' | 'ctr' | 'likeRate';
+export type RankingType = 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers';
 export type PeriodFilter = 'all' | '3months' | '6months' | '1year';
+export type VideoFilter = 'all' | 'regular' | 'short' | 'private';

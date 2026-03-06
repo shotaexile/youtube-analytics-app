@@ -93,15 +93,14 @@ export function analyzeVideo(video: VideoData): VideoAnalysis {
     }
   }
   
-  // 平均視聴時間分析
-  if (video.duration > 0 && video.avgViewDurationSeconds > 0) {
-    const retentionRate = (video.avgViewDurationSeconds / video.duration) * 100;
-    if (retentionRate > 60) {
-      strengths.push(`視聴維持率が高い（${retentionRate.toFixed(0)}%）- 最後まで見られている`);
-    } else if (retentionRate < 30) {
-      weaknesses.push(`視聴維持率が低い（${retentionRate.toFixed(0)}%）- 早期離脱が多い`);
-      improvements.push('冒頭30秒で視聴者を引き込む構成に改善する');
-      improvements.push('動画の冒頭に「この動画で分かること」を提示する');
+  // 平均視聴率分析
+  if (video.avgViewRate > 0) {
+    if (video.avgViewRate > 50) {
+      strengths.push(`平均視聴率が高い（${video.avgViewRate.toFixed(0)}%）- 最後まで見られている`);
+    } else if (video.avgViewRate < 20) {
+      weaknesses.push(`平均視聴率が低い（${video.avgViewRate.toFixed(0)}%）- 早期離脱が多い`);
+      improvements.push('冠頤30秒で視聴者を引き込む構成に改善する');
+      improvements.push('動画の冠頤30秒に「この動画で分かること」を提示する');
     }
   }
   

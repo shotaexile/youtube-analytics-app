@@ -47,7 +47,7 @@ export default function VideoDetailScreen() {
     );
   }
 
-  const retentionRate = video.duration > 0 ? Math.round((video.avgViewDurationSeconds / video.duration) * 100) : 0;
+  const retentionRate = video.avgViewRate > 0 ? Math.round(video.avgViewRate) : 0;
 
   return (
     <ScreenContainer containerClassName="bg-background" edges={["top", "left", "right"]}>
@@ -111,7 +111,7 @@ export default function VideoDetailScreen() {
             <MetricCard label="推定収益" value={video.estimatedRevenue > 0 ? formatRevenue(video.estimatedRevenue) : 'N/A'} icon="dollarsign.circle.fill" color="#22C55E" />
           </View>
           <View style={{ flexDirection: 'row' }}>
-            <MetricCard label="総再生時間" value={`${formatNumber(Math.round(video.totalWatchHours))}h`} icon="clock.fill" color="#F59E0B" />
+            <MetricCard label="平均視聴率" value={`${video.avgViewRate.toFixed(1)}%`} icon="clock.fill" color="#F59E0B" sub="視聴維持率" />
             <MetricCard label="インプレッション" value={formatNumber(video.impressions)} icon="eye.fill" color="#3B82F6" />
           </View>
           <View style={{ flexDirection: 'row' }}>
@@ -119,7 +119,7 @@ export default function VideoDetailScreen() {
             <MetricCard label="高評価率" value={`${video.likeRate.toFixed(1)}%`} icon="hand.thumbsup.fill" color="#EC4899" />
           </View>
           <View style={{ flexDirection: 'row' }}>
-            <MetricCard label="平均視聴時間" value={video.avgViewDuration} icon="clock.fill" color="#06B6D4" sub={`維持率 ${retentionRate}%`} />
+            <MetricCard label="登録者増減" value={video.subscriberChange >= 0 ? `+${video.subscriberChange.toLocaleString()}` : video.subscriberChange.toLocaleString()} icon="person.badge.plus" color={video.subscriberChange >= 0 ? '#22C55E' : '#EF4444'} />
             <MetricCard label="動画の長さ" value={formatDuration(video.duration)} icon="play.rectangle.fill" color="#64748B" />
           </View>
         </View>
