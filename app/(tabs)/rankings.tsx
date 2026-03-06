@@ -30,7 +30,6 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
   { key: 'all', label: 'すべて', color: '#606060' },
   { key: 'regular', label: '一般動画', color: '#FF0000' },
   { key: 'short', label: 'ショート', color: '#3B82F6' },
-  { key: 'private', label: '非公開', color: '#9CA3AF' },
 ];
 
 function MedalIcon({ rank }: { rank: number }) {
@@ -66,9 +65,10 @@ export default function RankingsScreen() {
     }
 
     // Video type filter
-    if (videoFilter === 'regular') filtered = filtered.filter(v => !v.isShort && !v.isPrivate);
+    // 'all' excludes private videos — they are in the dedicated private videos page
+    if (videoFilter === 'all') filtered = filtered.filter(v => !v.isPrivate);
+    else if (videoFilter === 'regular') filtered = filtered.filter(v => !v.isShort && !v.isPrivate);
     else if (videoFilter === 'short') filtered = filtered.filter(v => v.isShort);
-    else if (videoFilter === 'private') filtered = filtered.filter(v => v.isPrivate);
 
     // Sort by ranking type
     return [...filtered].sort((a, b) => {

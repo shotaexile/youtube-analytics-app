@@ -101,3 +101,28 @@ export const csvUploads = mysqlTable("csv_uploads", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type CsvUpload = typeof csvUploads.$inferSelect;
+
+/**
+ * Admin settings (password for CSV upload, push token registry, etc.)
+ */
+export const adminSettings = mysqlTable("admin_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
+  settingValue: text("settingValue"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AdminSetting = typeof adminSettings.$inferSelect;
+export type InsertAdminSetting = typeof adminSettings.$inferInsert;
+
+/**
+ * Push notification tokens from devices
+ */
+export const pushTokens = mysqlTable("push_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 512 }).notNull().unique(),
+  deviceName: varchar("deviceName", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PushToken = typeof pushTokens.$inferSelect;
+export type InsertPushToken = typeof pushTokens.$inferInsert;

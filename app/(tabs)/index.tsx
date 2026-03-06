@@ -10,7 +10,7 @@ import { getChannelConfig, saveChannelConfig, extractChannelId, ChannelConfig } 
 import { VideoFilter } from "@/lib/data/types";
 import { trpc } from "@/lib/trpc";
 import { getApiBaseUrl } from "@/constants/oauth";
-import { useVideos, useChannelSummary, useMonthlyStats } from "@/lib/data/use-analytics";
+import { useVideos, useChannelSummary, useMonthlyStats, useDbChannelConfig } from "@/lib/data/use-analytics";
 
 function SummaryCard({ label, value, icon, color }: { label: string; value: string; icon: any; color: string }) {
   return (
@@ -58,7 +58,6 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
   { key: 'all', label: 'すべて', color: '#606060' },
   { key: 'regular', label: '一般動画', color: '#FF0000' },
   { key: 'short', label: 'ショート', color: '#3B82F6' },
-  { key: 'private', label: '非公開', color: '#9CA3AF' },
 ];
 
 export default function DashboardScreen() {
@@ -70,9 +69,25 @@ export default function DashboardScreen() {
   const [channelIconUrlInput, setChannelIconUrlInput] = useState('');
   const [channelNameInput, setChannelNameInput] = useState('');
 
+  // Load channel config: prefer DB (shared), fallback to local
+  const dbChannelConfigQuery = useDbChannelConfig();
+  const utils = trpc.useUtils();
+  const saveChannelConfigMutation = trpc.analytics.saveChannelConfig.useMutation();
+
   useEffect(() => {
-    getChannelConfig().then(setChannelConfig);
-  }, []);
+    if (dbChannelConfigQuery.data) {
+      // DB has config — use it
+      setChannelConfig({
+        channelName: dbChannelConfigQuery.data.channelName,
+        channelUrl: dbChannelConfigQuery.data.channelUrl || '',
+        channelId: dbChannelConfigQuery.data.channelId || '',
+        iconUrl: dbChannelConfigQuery.data.iconUrl || '',
+      });
+    } else if (!dbChannelConfigQuery.isLoading) {
+      // No DB config — use local
+      getChannelConfig().then(setChannelConfig);
+    }
+  }, [dbChannelConfigQuery.data, dbChannelConfigQuery.isLoading]);
 
   const { summary: summaryData } = useChannelSummary();
   const { stats: monthlyStatsData } = useMonthlyStats(24);
@@ -83,9 +98,10 @@ export default function DashboardScreen() {
 
   const filteredVideos = useMemo(() => {
     let vids = allVideos;
-    if (videoFilter === 'regular') vids = vids.filter((v: typeof allVideos[0]) => !v.isShort && !v.isPrivate);
+    // 'all' and 'regular' exclude private videos; private videos are in the dedicated page
+    if (videoFilter === 'all') vids = vids.filter((v: typeof allVideos[0]) => !v.isPrivate);
+    else if (videoFilter === 'regular') vids = vids.filter((v: typeof allVideos[0]) => !v.isShort && !v.isPrivate);
     else if (videoFilter === 'short') vids = vids.filter((v: typeof allVideos[0]) => v.isShort);
-    else if (videoFilter === 'private') vids = vids.filter((v: typeof allVideos[0]) => v.isPrivate);
     return vids.slice(0, 15);
   }, [allVideos, videoFilter]);
 
@@ -98,8 +114,8 @@ export default function DashboardScreen() {
   );
 
   const handleSaveChannelUrl = async () => {
-    if (!channelUrlInput.trim() && !channelNameInput.trim()) {
-      Alert.alert('エラー', 'URLまたはチャンネル名を入力してください');
+    if (!channelNameInput.trim()) {
+      Alert.alert('エラー', 'チャンネル名を入力してください');
       return;
     }
 
@@ -107,29 +123,44 @@ export default function DashboardScreen() {
     setIsFetchingChannel(true);
 
     try {
-      // Use manually entered icon URL if provided
-      const iconUrl = channelIconUrlInput.trim();
+      const iconUrl = channelIconUrlInput.trim() || undefined;
       const channelId = channelUrlInput.trim() ? (extractChannelId(channelUrlInput) || channelUrlInput.trim()) : 'custom';
-      const channelName = channelNameInput.trim() || channelId;
+      const channelName = channelNameInput.trim();
 
+      // Save to DB first (shared across all team members)
+      try {
+        await saveChannelConfigMutation.mutateAsync({
+          channelName,
+          channelUrl: channelUrlInput.trim() || '',
+          channelId,
+          iconUrl,
+        });
+        // Invalidate DB cache so all devices refresh
+        await utils.analytics.getChannelConfig.invalidate();
+      } catch (dbErr) {
+        // DB save failed — fall back to local only
+        console.warn('DB channel config save failed, saving locally:', dbErr);
+      }
+
+      // Also save locally as backup
       await saveChannelConfig({
         channelUrl: channelUrlInput.trim() || '',
-        channelId: channelId,
-        channelName: channelName,
-        iconUrl: iconUrl,
+        channelId,
+        channelName,
+        iconUrl,
       });
+
+      const updated = await getChannelConfig();
+      setChannelConfig(updated);
+      setShowChannelModal(false);
+      setChannelUrlInput('');
+      setChannelIconUrlInput('');
+      setChannelNameInput('');
     } catch (e) {
       Alert.alert('エラー', '保存に失敗しました。再度お試しください。');
     } finally {
       setIsFetchingChannel(false);
     }
-
-    const updated = await getChannelConfig();
-    setChannelConfig(updated);
-    setShowChannelModal(false);
-    setChannelUrlInput('');
-    setChannelIconUrlInput('');
-    setChannelNameInput('');
   };
 
   return (

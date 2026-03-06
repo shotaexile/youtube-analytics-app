@@ -15,6 +15,13 @@
       "when": 1772816778179,
       "tag": "0001_jittery_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772820023282,
+      "tag": "0002_needy_jamie_braddock",
+      "breakpoints": true
     }
   ]
 }

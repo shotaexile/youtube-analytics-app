@@ -6,10 +6,34 @@ import {
   monthlyStats,
   channelConfig,
   csvUploads,
+  adminSettings,
+  pushTokens,
   type InsertVideo,
   type InsertMonthlyStats,
 } from "../drizzle/schema";
 import { eq, desc, asc, and } from "drizzle-orm";
+import * as crypto from "crypto";
+
+// ── push notification helper ──────────────────────────────────────────────────
+async function sendExpoPushNotifications(tokens: string[], title: string, body: string) {
+  if (tokens.length === 0) return;
+  const messages = tokens.map((token) => ({
+    to: token,
+    sound: "default",
+    title,
+    body,
+    data: { type: "csv_update" },
+  }));
+  try {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(messages),
+    });
+  } catch (e) {
+    console.warn("Push notification send failed:", e);
+  }
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -203,6 +227,18 @@ export const analyticsRouter = router({
         videoCount: videoRows.length,
       });
 
+      // Send push notifications to all registered devices
+      const tokenRows = await db.select().from(pushTokens);
+      const tokens = tokenRows.map((r) => r.token).filter(Boolean);
+      if (tokens.length > 0) {
+        const uploader = input.uploadedBy || "チームメンバー";
+        await sendExpoPushNotifications(
+          tokens,
+          "📊 ViewCore データ更新",
+          `${uploader}がCSVをアップロードしました（${videoRows.length}本）。最新データを確認してください。`
+        );
+      }
+
       return { success: true, videoCount: videoRows.length };
     }),
 
@@ -331,6 +367,62 @@ export const analyticsRouter = router({
           iconUrl: input.iconUrl || null,
         });
       }
+      return { success: true };
+    }),
+
+  // ── Admin password management ────────────────────────────────────────────
+
+  // Check if admin password is set
+  hasAdminPassword: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return false;
+    const rows = await db.select().from(adminSettings).where(eq(adminSettings.settingKey, "admin_password_hash"));
+    return rows.length > 0 && !!rows[0].settingValue;
+  }),
+
+  // Set admin password (first time or reset)
+  setAdminPassword: publicProcedure
+    .input(z.object({ password: z.string().min(4) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const hash = crypto.createHash("sha256").update(input.password).digest("hex");
+      const existing = await db.select().from(adminSettings).where(eq(adminSettings.settingKey, "admin_password_hash"));
+      if (existing.length > 0) {
+        await db.update(adminSettings).set({ settingValue: hash }).where(eq(adminSettings.settingKey, "admin_password_hash"));
+      } else {
+        await db.insert(adminSettings).values({ settingKey: "admin_password_hash", settingValue: hash });
+      }
+      return { success: true };
+    }),
+
+  // Verify admin password
+  verifyAdminPassword: publicProcedure
+    .input(z.object({ password: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const rows = await db.select().from(adminSettings).where(eq(adminSettings.settingKey, "admin_password_hash"));
+      if (rows.length === 0 || !rows[0].settingValue) {
+        // No password set — allow access
+        return { valid: true };
+      }
+      const hash = crypto.createHash("sha256").update(input.password).digest("hex");
+      return { valid: hash === rows[0].settingValue };
+    }),
+
+  // ── Push token management ─────────────────────────────────────────────────
+
+  // Register push token
+  registerPushToken: publicProcedure
+    .input(z.object({ token: z.string(), deviceName: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { success: false };
+      await db
+        .insert(pushTokens)
+        .values({ token: input.token, deviceName: input.deviceName || null })
+        .onDuplicateKeyUpdate({ set: { deviceName: input.deviceName || null } });
       return { success: true };
     }),
 
