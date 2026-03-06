@@ -2,18 +2,20 @@ import { ScrollView, Text, View, TouchableOpacity, Dimensions } from "react-nati
 import { useState, useMemo } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, getMonthlyStats, formatNumber } from "@/lib/data/csv-parser";
+import { parseVideoData, getMonthlyStats, formatNumber, getDayOfWeekStats, getHourOfDayStats, getCategoryStats } from "@/lib/data/csv-parser";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
 
-type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter';
+type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter' | 'weekday' | 'category';
 
 const CHART_TABS: { key: ChartTab; label: string; emoji: string }[] = [
   { key: 'monthly', label: '月別推移', emoji: '📈' },
   { key: 'ctr', label: 'CTR分布', emoji: '🎯' },
   { key: 'duration', label: '動画長さ', emoji: '⏱' },
   { key: 'scatter', label: '視聴×収益', emoji: '💰' },
+  { key: 'weekday', label: '曜日分析', emoji: '📅' },
+  { key: 'category', label: 'カテゴリ', emoji: '🏷️' },
 ];
 
 // 縦棒グラフ（月別推移用）- 値ラベル付き
@@ -198,6 +200,9 @@ export default function ChartsScreen() {
   const [activeTab, setActiveTab] = useState<ChartTab>('monthly');
   const videos = useMemo(() => parseVideoData(), []);
   const monthlyStats = useMemo(() => getMonthlyStats(), []);
+  const dayOfWeekStats = useMemo(() => getDayOfWeekStats(), []);
+  const monthlyPatternStats = useMemo(() => getHourOfDayStats(), []);
+  const categoryStats = useMemo(() => getCategoryStats(), []);
 
   const monthlyViewsData = useMemo(() =>
     monthlyStats.slice(-12).map(m => ({ label: m.month, value: m.views })),
@@ -385,6 +390,107 @@ export default function ChartsScreen() {
                 </Text>
               </View>
             </View>
+          )}
+
+          {/* Weekday Tab */}
+          {activeTab === 'weekday' && (
+            <>
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>曜日別 投稿本数・平均視聴回数</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>どの曜日に投稿すると伸びやすいか</Text>
+                {(() => {
+                  const maxAvg = Math.max(...dayOfWeekStats.map(d => d.avgViews));
+                  const bestDay = dayOfWeekStats.reduce((best, d) => d.avgViews > best.avgViews ? d : best, dayOfWeekStats[0]);
+                  return (
+                    <View>
+                      {dayOfWeekStats.map((d, i) => (
+                        <View key={i} style={{ marginBottom: 12 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: d.day === bestDay.day ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: d.day === bestDay.day ? 'white' : '#606060' }}>{d.day}</Text>
+                              </View>
+                              <Text style={{ fontSize: 12, color: '#9CA3AF' }}>{d.count}本</Text>
+                            </View>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F' }}>{formatNumber(d.avgViews)}</Text>
+                          </View>
+                          <View style={{ height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}>
+                            <View style={{ width: maxAvg > 0 ? `${(d.avgViews / maxAvg) * 100}%` as any : '0%', height: 8, backgroundColor: d.day === bestDay.day ? '#FF0000' : '#FF000060', borderRadius: 4 }} />
+                          </View>
+                        </View>
+                      ))}
+                      <View style={{ marginTop: 8, padding: 12, backgroundColor: '#FFF5F5', borderRadius: 10 }}>
+                        <Text style={{ fontSize: 12, color: '#FF0000', fontWeight: '600' }}>🏆 最も平均視聴回数が高い曜日</Text>
+                        <Text style={{ fontSize: 20, fontWeight: '800', color: '#FF0000', marginTop: 4 }}>{bestDay.day}曜日</Text>
+                        <Text style={{ fontSize: 12, color: '#606060', marginTop: 2 }}>平均 {formatNumber(bestDay.avgViews)} 回 / {bestDay.count}本投稿</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+              </View>
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>月別 投稿数・平均視聴回数</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>どの月に投稿した動画が伸びやすいか</Text>
+                <HorizontalBarChart
+                  data={monthlyPatternStats.filter(m => m.count > 0).map(m => ({ label: m.label, value: m.avgViews }))}
+                  color="#3B82F6"
+                  valueFormat={formatNumber}
+                />
+              </View>
+            </>
+          )}
+
+          {/* Category Tab */}
+          {activeTab === 'category' && (
+            <>
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>カテゴリ別 動画数・平均視聴回数</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>コンテンツジャンル別のパフォーマンス比較</Text>
+                {(() => {
+                  const maxAvg = Math.max(...categoryStats.map(c => c.avgViews));
+                  return (
+                    <View style={{ gap: 12 }}>
+                      {categoryStats.sort((a, b) => b.avgViews - a.avgViews).map((cat, i) => (
+                        <View key={i}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} />
+                              <Text style={{ fontSize: 13, color: '#0F0F0F', fontWeight: '600' }}>{cat.name}</Text>
+                              <Text style={{ fontSize: 11, color: '#9CA3AF' }}>{cat.count}本</Text>
+                            </View>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F' }}>{formatNumber(cat.avgViews)}</Text>
+                          </View>
+                          <View style={{ height: 10, backgroundColor: '#F3F4F6', borderRadius: 5, overflow: 'hidden' }}>
+                            <View style={{ width: maxAvg > 0 ? `${(cat.avgViews / maxAvg) * 100}%` as any : '0%', height: 10, backgroundColor: cat.color, borderRadius: 5 }} />
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
+              </View>
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>カテゴリ別 平均CTR</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>クリック率が高いジャンルはどれか</Text>
+                <HorizontalBarChart
+                  data={categoryStats.sort((a, b) => b.avgCtr - a.avgCtr).map(c => ({ label: c.name, value: c.avgCtr }))}
+                  color="#8B5CF6"
+                  valueFormat={(v) => `${v.toFixed(1)}%`}
+                />
+              </View>
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>カテゴリ別 総収益</Text>
+                {categoryStats.sort((a, b) => b.totalRevenue - a.totalRevenue).map((cat, i) => (
+                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < categoryStats.length - 1 ? 0.5 : 0, borderBottomColor: '#F0F0F0' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} />
+                      <Text style={{ fontSize: 13, color: '#444', fontWeight: '500' }}>{cat.name}</Text>
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F' }}>¥{formatNumber(Math.round(cat.totalRevenue))}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
           )}
         </View>
       </ScrollView>

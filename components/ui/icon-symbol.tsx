@@ -32,6 +32,9 @@ const MAPPING = {
   "magnifyingglass": "search",
   "xmark": "close",
   "slider.horizontal.3": "tune",
+  "play.fill": "play-arrow",
+  "doc.fill": "description",
+  "square.and.arrow.up": "share",
 } as IconMapping;
 
 export function IconSymbol({

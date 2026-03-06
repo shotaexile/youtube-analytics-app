@@ -512,12 +512,33 @@ function parseTime(timeStr: string): number {
   return 0;
 }
 
+// Month name to number map for iOS compatibility
+// new Date("Feb 21, 2026") fails on iOS JavaScriptCore
+const MONTH_MAP: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+};
+
 function parseDate(dateStr: string): Date {
-  try {
-    return new Date(dateStr);
-  } catch {
-    return new Date();
+  if (!dateStr) return new Date(0);
+  // Handle "Feb 21, 2026" format (YouTube Analytics CSV export)
+  const engMatch = dateStr.match(/^(\w{3})\s+(\d{1,2}),\s+(\d{4})$/);
+  if (engMatch) {
+    const month = MONTH_MAP[engMatch[1]];
+    const day = parseInt(engMatch[2]);
+    const year = parseInt(engMatch[3]);
+    if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+      return new Date(year, month, day);
+    }
   }
+  // Handle ISO format "YYYY-MM-DD"
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+  }
+  // Last resort fallback
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date(0) : d;
 }
 
 function parseCSVLine(line: string): string[] {
@@ -712,4 +733,115 @@ export function formatDuration(seconds: number): string {
   const s = seconds % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// ========== 曜日・時間帯別統計 ==========
+export function getDayOfWeekStats() {
+  const videos = parseVideoData();
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const stats = days.map(d => ({ day: d, views: 0, count: 0, avgViews: 0 }));
+
+  for (const video of videos) {
+    const date = video.publishedDate;
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue;
+    const dow = date.getDay(); // 0=Sun
+    stats[dow].views += video.views;
+    stats[dow].count += 1;
+  }
+
+  for (const s of stats) {
+    s.avgViews = s.count > 0 ? Math.round(s.views / s.count) : 0;
+  }
+  return stats;
+}
+
+export function getHourOfDayStats() {
+  // YouTube Analytics CSVには時刻データがないため、
+  // 公開時刻のパターンを月ごとに集計して代替分析を提供
+  const videos = parseVideoData();
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    label: `${i + 1}月`,
+    count: 0,
+    avgViews: 0,
+    totalViews: 0,
+  }));
+
+  for (const video of videos) {
+    const date = video.publishedDate;
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue;
+    const m = date.getMonth(); // 0-indexed
+    months[m].count += 1;
+    months[m].totalViews += video.views;
+  }
+
+  for (const m of months) {
+    m.avgViews = m.count > 0 ? Math.round(m.totalViews / m.count) : 0;
+  }
+  return months;
+}
+
+// ========== カテゴリ別分析 ==========
+export type VideoCategory = {
+  name: string;
+  keywords: string[];
+  color: string;
+};
+
+export const VIDEO_CATEGORIES: VideoCategory[] = [
+  { name: 'REAL VALUE', keywords: ['REAL VALUE', 'REAL CAREER'], color: '#FF0000' },
+  { name: '潜入・告発', keywords: ['潜入', '告発', '暴く', '暴き', '闇', '実態', '全貌'], color: '#8B5CF6' },
+  { name: 'お金・不動産', keywords: ['不動産', '億', '収益', '稼ぐ', '資産', 'マイホーム', '家賃', 'ビットコイン', '投資'], color: '#22C55E' },
+  { name: 'ビジネス', keywords: ['社長', '起業', '事業', '会社', '経営', '年商', '売上'], color: '#F59E0B' },
+  { name: 'ショート', keywords: ['#shorts', 'shorts'], color: '#3B82F6' },
+  { name: '海外・旅行', keywords: ['カナダ', 'ラオス', 'グアテマラ', 'ドバイ', '海外', '外国', '国', '韓国'], color: '#06B6D4' },
+  { name: '社会問題', keywords: ['詐欺', '違法', '犯罪', '事件', '問題', '被害', '警察', 'ウイグル', '北朝鮮'], color: '#EC4899' },
+  { name: 'その他', keywords: [], color: '#9CA3AF' },
+];
+
+export function getCategoryStats() {
+  const videos = parseVideoData();
+  const result = VIDEO_CATEGORIES.map(cat => ({
+    name: cat.name,
+    color: cat.color,
+    count: 0,
+    totalViews: 0,
+    avgViews: 0,
+    totalRevenue: 0,
+    avgCtr: 0,
+    totalCtr: 0,
+    videos: [] as typeof videos,
+  }));
+
+  for (const video of videos) {
+    const titleLower = video.title.toLowerCase();
+    let matched = false;
+    for (let i = 0; i < VIDEO_CATEGORIES.length - 1; i++) {
+      const cat = VIDEO_CATEGORIES[i];
+      if (cat.keywords.some(kw => video.title.includes(kw) || titleLower.includes(kw.toLowerCase()))) {
+        result[i].count += 1;
+        result[i].totalViews += video.views;
+        result[i].totalRevenue += video.estimatedRevenue > 0 ? video.estimatedRevenue : 0;
+        result[i].totalCtr += video.ctr;
+        result[i].videos.push(video);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      const last = result[result.length - 1];
+      last.count += 1;
+      last.totalViews += video.views;
+      last.totalRevenue += video.estimatedRevenue > 0 ? video.estimatedRevenue : 0;
+      last.totalCtr += video.ctr;
+      last.videos.push(video);
+    }
+  }
+
+  for (const r of result) {
+    r.avgViews = r.count > 0 ? Math.round(r.totalViews / r.count) : 0;
+    r.avgCtr = r.count > 0 ? parseFloat((r.totalCtr / r.count).toFixed(2)) : 0;
+  }
+
+  return result.filter(r => r.count > 0);
 }

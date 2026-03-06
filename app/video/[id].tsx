@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { Image } from "expo-image";
@@ -68,6 +68,23 @@ export default function VideoDetailScreen() {
           style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: '#F3F4F6' }}
           contentFit="cover"
         />
+        {/* Quick Action Buttons */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', gap: 10, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${video.id}`)}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#FF0000', borderRadius: 10 }}
+          >
+            <IconSymbol name="play.fill" size={14} color="white" />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: 'white' }}>YouTubeで開く</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://studio.youtube.com/video/${video.id}/analytics/tab-overview/period-default`)}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#0F0F0F', borderRadius: 10 }}
+          >
+            <IconSymbol name="chart.bar.fill" size={14} color="white" />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: 'white' }}>Studio分析</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ backgroundColor: 'white', padding: 16, marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <View style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#FF000015', borderRadius: 6 }}>
