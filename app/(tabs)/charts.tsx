@@ -7,7 +7,7 @@ import { parseVideoData, getMonthlyStats, formatNumber, getDayOfWeekStats, getHo
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
 
-type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter' | 'weekday' | 'category';
+type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter' | 'weekday' | 'category' | 'shorts';
 
 const CHART_TABS: { key: ChartTab; label: string; emoji: string }[] = [
   { key: 'monthly', label: '月別推移', emoji: '📈' },
@@ -16,6 +16,7 @@ const CHART_TABS: { key: ChartTab; label: string; emoji: string }[] = [
   { key: 'scatter', label: '視聴×収益', emoji: '💰' },
   { key: 'weekday', label: '曜日分析', emoji: '📅' },
   { key: 'category', label: 'カテゴリ', emoji: '🏷️' },
+  { key: 'shorts', label: 'ショート', emoji: '⚡' },
 ];
 
 // 縦棒グラフ（月別推移用）- 値ラベル付き
@@ -203,6 +204,48 @@ export default function ChartsScreen() {
   const dayOfWeekStats = useMemo(() => getDayOfWeekStats(), []);
   const monthlyPatternStats = useMemo(() => getHourOfDayStats(), []);
   const categoryStats = useMemo(() => getCategoryStats(), []);
+
+  // Shorts-specific data
+  const shortVideos = useMemo(() => videos.filter(v => v.isShort), [videos]);
+  const regularVideos = useMemo(() => videos.filter(v => !v.isShort && !v.isPrivate), [videos]);
+
+  const shortsCtrDistribution = useMemo(() => {
+    const buckets = [
+      { label: '0-3%', min: 0, max: 3, value: 0 },
+      { label: '3-5%', min: 3, max: 5, value: 0 },
+      { label: '5-7%', min: 5, max: 7, value: 0 },
+      { label: '7-10%', min: 7, max: 10, value: 0 },
+      { label: '10-15%', min: 10, max: 15, value: 0 },
+      { label: '15%+', min: 15, max: 999, value: 0 },
+    ];
+    for (const v of shortVideos) {
+      const bucket = buckets.find(b => v.ctr >= b.min && v.ctr < b.max);
+      if (bucket) bucket.value++;
+    }
+    return buckets;
+  }, [shortVideos]);
+
+  const shortsMonthlyData = useMemo(() => {
+    const monthMap = new Map<string, { views: number; count: number }>();
+    for (const v of shortVideos) {
+      const date = v.publishedDate;
+      if (isNaN(date.getTime())) continue;
+      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const existing = monthMap.get(month) || { views: 0, count: 0 };
+      existing.views += v.views;
+      existing.count += 1;
+      monthMap.set(month, existing);
+    }
+    return Array.from(monthMap.entries())
+      .map(([month, stats]) => ({ label: month, value: stats.views, count: stats.count }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .slice(-12);
+  }, [shortVideos]);
+
+  const shortsTopVideos = useMemo(() =>
+    [...shortVideos].sort((a, b) => b.views - a.views).slice(0, 10),
+    [shortVideos]
+  );
 
   const monthlyViewsData = useMemo(() =>
     monthlyStats.slice(-12).map(m => ({ label: m.month, value: m.views })),
@@ -487,6 +530,98 @@ export default function ChartsScreen() {
                       <Text style={{ fontSize: 13, color: '#444', fontWeight: '500' }}>{cat.name}</Text>
                     </View>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F' }}>¥{formatNumber(Math.round(cat.totalRevenue))}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+          {/* Shorts Tab */}
+          {activeTab === 'shorts' && (
+            <>
+              {/* Shorts Overview */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>⚡ ショート動画 概要</Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#3B82F6' }}>本数</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '800', color: '#3B82F6' }}>{shortVideos.length}本</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#F0FDF4', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#22C55E' }}>総視聴回数</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#22C55E' }}>{formatNumber(shortVideos.reduce((s, v) => s + v.views, 0))}</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FFF5F5', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#EF4444' }}>平均視聴回数</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#EF4444' }}>{formatNumber(Math.round(shortVideos.reduce((s, v) => s + v.views, 0) / (shortVideos.length || 1)))}</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FFFBEB', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#F59E0B' }}>平均CTR</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#F59E0B' }}>{(shortVideos.reduce((s, v) => s + v.ctr, 0) / (shortVideos.length || 1)).toFixed(1)}%</Text>
+                  </View>
+                </View>
+                {/* Compare with regular */}
+                <View style={{ marginTop: 12, padding: 12, backgroundColor: '#F8F8F8', borderRadius: 10 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 8 }}>一般動画との比較</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 12, color: '#606060' }}>平均視聴回数</Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <Text style={{ fontSize: 12, color: '#3B82F6', fontWeight: '600' }}>ショート: {formatNumber(Math.round(shortVideos.reduce((s, v) => s + v.views, 0) / (shortVideos.length || 1)))}</Text>
+                      <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '600' }}>一般: {formatNumber(Math.round(regularVideos.reduce((s, v) => s + v.views, 0) / (regularVideos.length || 1)))}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 12, color: '#606060' }}>平均CTR</Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <Text style={{ fontSize: 12, color: '#3B82F6', fontWeight: '600' }}>ショート: {(shortVideos.reduce((s, v) => s + v.ctr, 0) / (shortVideos.length || 1)).toFixed(1)}%</Text>
+                      <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '600' }}>一般: {(regularVideos.reduce((s, v) => s + v.ctr, 0) / (regularVideos.length || 1)).toFixed(1)}%</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* Shorts Monthly Trend */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>ショート 月別視聴回数</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>ショート動画の月別視聴推移（直近12ヶ月）</Text>
+                {shortsMonthlyData.length > 0 ? (
+                  <VerticalBarChart data={shortsMonthlyData} color="#3B82F6" />
+                ) : (
+                  <Text style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center', paddingVertical: 20 }}>ショートデータがありません</Text>
+                )}
+              </View>
+
+              {/* Shorts CTR Distribution */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>ショート CTR分布</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>ショート動画のクリック率分布（{shortVideos.length}本）</Text>
+                <DistributionBarChart data={shortsCtrDistribution} color="#3B82F6" total={shortVideos.length} />
+                <View style={{ marginTop: 12, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 10 }}>
+                  <Text style={{ fontSize: 12, color: '#3B82F6', fontWeight: '600' }}>💡 ショート平均CTR</Text>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#3B82F6', marginTop: 4 }}>
+                    {(shortVideos.reduce((s, v) => s + v.ctr, 0) / (shortVideos.length || 1)).toFixed(2)}%
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>全動画平均: {(videos.reduce((s, v) => s + v.ctr, 0) / videos.length).toFixed(2)}%</Text>
+                </View>
+              </View>
+
+              {/* Shorts Top 10 */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>ショート TOP10</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 12 }}>視聴回数が多いショート動画</Text>
+                {shortsTopVideos.map((video, i) => (
+                  <View key={video.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: i < shortsTopVideos.length - 1 ? 0.5 : 0, borderBottomColor: '#F0F0F0', gap: 10 }}>
+                    <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: i < 3 ? '#3B82F6' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: i < 3 ? 'white' : '#9CA3AF' }}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F0F0F' }} numberOfLines={2}>{video.title}</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
+                        <Text style={{ fontSize: 11, color: '#3B82F6', fontWeight: '600' }}>{formatNumber(video.views)}回</Text>
+                        <Text style={{ fontSize: 11, color: '#9CA3AF' }}>CTR {video.ctr.toFixed(1)}%</Text>
+                      </View>
+                    </View>
                   </View>
                 ))}
               </View>

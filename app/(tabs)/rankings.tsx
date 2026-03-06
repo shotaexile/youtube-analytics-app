@@ -11,6 +11,8 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 const RANKING_TYPES: { key: RankingType; label: string; icon: any; color: string; format: (v: number) => string }[] = [
   { key: 'views', label: '視聴回数', icon: 'eye.fill', color: '#FF0000', format: formatNumber },
   { key: 'revenue', label: '収益', icon: 'dollarsign.circle.fill', color: '#22C55E', format: formatRevenue },
+  { key: 'impressions', label: 'インプレ', icon: 'chart.bar.fill', color: '#0EA5E9', format: formatNumber },
+  { key: 'avgViewRate', label: '平均視聴率', icon: 'play.fill', color: '#F97316', format: (v) => `${v.toFixed(1)}%` },
   { key: 'subscribers', label: '登録者増減', icon: 'person.badge.plus', color: '#F59E0B', format: (v) => v >= 0 ? `+${v.toLocaleString()}` : v.toLocaleString() },
   { key: 'ctr', label: 'CTR', icon: 'arrow.up.right', color: '#8B5CF6', format: (v) => `${v.toFixed(1)}%` },
   { key: 'likeRate', label: '高評価率', icon: 'hand.thumbsup.fill', color: '#EC4899', format: (v) => `${v.toFixed(1)}%` },
@@ -71,6 +73,8 @@ export default function RankingsScreen() {
       switch (rankingType) {
         case 'views': return b.views - a.views;
         case 'revenue': return b.estimatedRevenue - a.estimatedRevenue;
+        case 'impressions': return b.impressions - a.impressions;
+        case 'avgViewRate': return b.avgViewRate - a.avgViewRate;
         case 'subscribers': return b.subscriberChange - a.subscriberChange;
         case 'ctr': return b.ctr - a.ctr;
         case 'likeRate': return b.likeRate - a.likeRate;
@@ -83,6 +87,8 @@ export default function RankingsScreen() {
     switch (rankingType) {
       case 'views': return video.views;
       case 'revenue': return video.estimatedRevenue;
+      case 'impressions': return video.impressions;
+      case 'avgViewRate': return video.avgViewRate;
       case 'subscribers': return video.subscriberChange;
       case 'ctr': return video.ctr;
       case 'likeRate': return video.likeRate;

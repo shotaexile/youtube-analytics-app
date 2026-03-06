@@ -35,6 +35,12 @@ const MAPPING = {
   "play.fill": "play-arrow",
   "doc.fill": "description",
   "square.and.arrow.up": "share",
+  "lock.fill": "lock",
+  "person.badge.plus": "person-add",
+  "arrow.clockwise": "refresh",
+  "trash.fill": "delete",
+  "link": "link",
+  "video.fill": "videocam",
 } as IconMapping;
 
 export function IconSymbol({

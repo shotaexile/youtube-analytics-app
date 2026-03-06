@@ -8,10 +8,10 @@ export interface ChannelConfig {
 }
 
 const DEFAULT_CONFIG: ChannelConfig = {
-  channelId: 'UCkBhHqCG4N8nOBxBMt4LLIQ', // 三崎優太のチャンネルID
-  channelName: '三崎優太',
-  channelUrl: 'https://www.youtube.com/@yuuta.misaki',
-  iconUrl: 'https://yt3.googleusercontent.com/ytc/AIdro_mRQCpKQBUYqJCYfGMvVSKzYjJvJb5bqFOhNRQWlw=s176-c-k-c0x00ffffff-no-rj',
+  channelId: '',
+  channelName: 'ViewCore',
+  channelUrl: '',
+  iconUrl: '',
 };
 
 const STORAGE_KEY = 'channel_config';

@@ -83,6 +83,8 @@ export default function DashboardScreen() {
 
   const last12Months = useMemo(() => monthlyStats.slice(-12), [monthlyStats]);
 
+  const [isFetchingChannel, setIsFetchingChannel] = useState(false);
+
   const handleSaveChannelUrl = async () => {
     if (!channelUrlInput.trim()) {
       Alert.alert('エラー', 'URLを入力してください');
@@ -90,13 +92,49 @@ export default function DashboardScreen() {
     }
     const channelId = extractChannelId(channelUrlInput);
     if (!channelId) {
-      Alert.alert('エラー', '正しいYouTubeチャンネルURLを入力してください\n例: https://www.youtube.com/@handle');
+      Alert.alert('エラー', '正しいYouTubeチャンネルURLを入力してください。例: https://www.youtube.com/@handle');
       return;
     }
-    await saveChannelConfig({
-      channelUrl: channelUrlInput,
-      channelId: channelId,
-    });
+
+    setIsFetchingChannel(true);
+    try {
+      // Try to fetch channel info from YouTube
+      let iconUrl = '';
+      let channelName = '';
+
+      // Try oEmbed for channel name
+      try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(channelUrlInput)}&format=json`;
+        const resp = await fetch(oembedUrl);
+        if (resp.ok) {
+          const data = await resp.json();
+          channelName = data.author_name || '';
+          iconUrl = data.thumbnail_url?.replace('/hqdefault.jpg', '') || '';
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Try to get channel icon from YouTube's public API
+      if (!iconUrl && channelId.startsWith('UC')) {
+        iconUrl = `https://yt3.ggpht.com/channel/${channelId}`;
+      }
+
+      await saveChannelConfig({
+        channelUrl: channelUrlInput,
+        channelId: channelId,
+        channelName: channelName || channelId,
+        iconUrl: iconUrl,
+      });
+    } catch (e) {
+      await saveChannelConfig({
+        channelUrl: channelUrlInput,
+        channelId: channelId,
+      });
+    } finally {
+      setIsFetchingChannel(false);
+    }
+
     const updated = await getChannelConfig();
     setChannelConfig(updated);
     setShowChannelModal(false);
@@ -356,9 +394,10 @@ export default function DashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSaveChannelUrl}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#FF0000', alignItems: 'center' }}
+                disabled={isFetchingChannel}
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: isFetchingChannel ? '#9CA3AF' : '#FF0000', alignItems: 'center' }}
               >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>保存</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>{isFetchingChannel ? '取得中...' : '保存'}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -100,6 +100,7 @@ function VideoCard({ video }: { video: VideoData }) {
 }
 
 export default function VideosScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ grade?: string; filter?: VideoFilter }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortType, setSortType] = useState<SortType>('date');
@@ -157,7 +158,13 @@ export default function VideosScreen() {
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10 }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F0F0F', flex: 1 }}>動画一覧</Text>
-          <Text style={{ fontSize: 12, color: '#606060', marginRight: 12 }}>{filteredVideos.length}本</Text>
+          <Text style={{ fontSize: 12, color: '#606060', marginRight: 8 }}>{filteredVideos.length}本</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/private-videos' as any)}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 6 }}
+          >
+            <IconSymbol name="lock.fill" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSearch(!showSearch)}
             style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: showSearch ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}

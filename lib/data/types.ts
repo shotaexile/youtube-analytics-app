@@ -46,6 +46,6 @@ export interface PerformanceScore {
   ctrScore: number;
 }
 
-export type RankingType = 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers';
+export type RankingType = 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers' | 'impressions' | 'avgViewRate';
 export type PeriodFilter = 'all' | '3months' | '6months' | '1year';
 export type VideoFilter = 'all' | 'regular' | 'short' | 'private';
