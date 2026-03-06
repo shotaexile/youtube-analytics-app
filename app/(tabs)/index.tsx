@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from "react-native";
 import { useRouter } from "expo-router";
 import { useMemo, useState, useEffect } from "react";
 import { Image } from "expo-image";
@@ -8,6 +8,8 @@ import { parseVideoData, getChannelSummary, getMonthlyStats, formatNumber, forma
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getChannelConfig, saveChannelConfig, extractChannelId, ChannelConfig } from "@/lib/data/channel-config";
 import { VideoFilter } from "@/lib/data/types";
+import { trpc } from "@/lib/trpc";
+import { getApiBaseUrl } from "@/constants/oauth";
 
 function SummaryCard({ label, value, icon, color }: { label: string; value: string; icon: any; color: string }) {
   return (
@@ -64,6 +66,8 @@ export default function DashboardScreen() {
   const [channelConfig, setChannelConfig] = useState<ChannelConfig | null>(null);
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [channelUrlInput, setChannelUrlInput] = useState('');
+  const [channelIconUrlInput, setChannelIconUrlInput] = useState('');
+  const [channelNameInput, setChannelNameInput] = useState('');
 
   useEffect(() => {
     getChannelConfig().then(setChannelConfig);
@@ -84,53 +88,34 @@ export default function DashboardScreen() {
   const last12Months = useMemo(() => monthlyStats.slice(-12), [monthlyStats]);
 
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
+  const channelInfoQuery = trpc.youtube.channelInfo.useQuery(
+    { channelUrl: channelUrlInput },
+    { enabled: false }
+  );
 
   const handleSaveChannelUrl = async () => {
-    if (!channelUrlInput.trim()) {
-      Alert.alert('エラー', 'URLを入力してください');
-      return;
-    }
-    const channelId = extractChannelId(channelUrlInput);
-    if (!channelId) {
-      Alert.alert('エラー', '正しいYouTubeチャンネルURLを入力してください。例: https://www.youtube.com/@handle');
+    if (!channelUrlInput.trim() && !channelNameInput.trim()) {
+      Alert.alert('エラー', 'URLまたはチャンネル名を入力してください');
       return;
     }
 
+    Keyboard.dismiss();
     setIsFetchingChannel(true);
+
     try {
-      // Try to fetch channel info from YouTube
-      let iconUrl = '';
-      let channelName = '';
-
-      // Try oEmbed for channel name
-      try {
-        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(channelUrlInput)}&format=json`;
-        const resp = await fetch(oembedUrl);
-        if (resp.ok) {
-          const data = await resp.json();
-          channelName = data.author_name || '';
-          iconUrl = data.thumbnail_url?.replace('/hqdefault.jpg', '') || '';
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      // Try to get channel icon from YouTube's public API
-      if (!iconUrl && channelId.startsWith('UC')) {
-        iconUrl = `https://yt3.ggpht.com/channel/${channelId}`;
-      }
+      // Use manually entered icon URL if provided
+      const iconUrl = channelIconUrlInput.trim();
+      const channelId = channelUrlInput.trim() ? (extractChannelId(channelUrlInput) || channelUrlInput.trim()) : 'custom';
+      const channelName = channelNameInput.trim() || channelId;
 
       await saveChannelConfig({
-        channelUrl: channelUrlInput,
+        channelUrl: channelUrlInput.trim() || '',
         channelId: channelId,
-        channelName: channelName || channelId,
+        channelName: channelName,
         iconUrl: iconUrl,
       });
     } catch (e) {
-      await saveChannelConfig({
-        channelUrl: channelUrlInput,
-        channelId: channelId,
-      });
+      Alert.alert('エラー', '保存に失敗しました。再度お試しください。');
     } finally {
       setIsFetchingChannel(false);
     }
@@ -139,6 +124,8 @@ export default function DashboardScreen() {
     setChannelConfig(updated);
     setShowChannelModal(false);
     setChannelUrlInput('');
+    setChannelIconUrlInput('');
+    setChannelNameInput('');
   };
 
   return (
@@ -158,14 +145,16 @@ export default function DashboardScreen() {
                   contentFit="cover"
                 />
               ) : (
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FF0000', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: 16, fontWeight: '900' }}>YT</Text>
-                </View>
+                <Image
+                  source={require('@/assets/images/icon.png')}
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F3F4F6' }}
+                  contentFit="cover"
+                />
               )}
               <View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Text style={{ fontSize: 17, fontWeight: '800', color: '#0F0F0F' }}>
-                    {channelConfig?.channelName || '三崎優太'}
+                    {channelConfig?.channelName || 'ViewCore'}
                   </Text>
                   <IconSymbol name="chevron.right" size={12} color="#9CA3AF" />
                 </View>
@@ -341,67 +330,143 @@ export default function DashboardScreen() {
       </ScrollView>
 
       {/* Channel Config Modal */}
-      <Modal visible={showChannelModal} transparent animationType="slide">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F', marginBottom: 8 }}>チャンネル設定</Text>
-            <Text style={{ fontSize: 13, color: '#606060', marginBottom: 16, lineHeight: 20 }}>
-              YouTubeチャンネルのURLを入力すると、チャンネルアイコンと名前が表示されます。
-            </Text>
+      <Modal visible={showChannelModal} transparent animationType="slide" onRequestClose={() => { setShowChannelModal(false); setChannelUrlInput(''); }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}>
+                  <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 24, paddingBottom: Platform.OS === 'ios' ? 34 : 24 }}>
+                  {/* Handle bar */}
+                  <View style={{ width: 36, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F', marginBottom: 6 }}>チャンネル設定</Text>
+                  <Text style={{ fontSize: 13, color: '#606060', marginBottom: 16, lineHeight: 20 }}>
+                    チャンネル名とアイコン画像 URL を入力してください。
+                  </Text>
 
-            {/* Current Channel Preview */}
-            {channelConfig?.iconUrl && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-                <Image
-                  source={{ uri: channelConfig.iconUrl }}
-                  style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#F3F4F6' }}
-                  contentFit="cover"
-                />
-                <View>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F0F0F' }}>{channelConfig.channelName}</Text>
-                  <Text style={{ fontSize: 11, color: '#606060' }}>{channelConfig.channelUrl}</Text>
+                  {/* Current Channel Preview */}
+                  {channelConfig?.iconUrl && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                      <Image
+                        source={{ uri: channelConfig.iconUrl }}
+                        style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#F3F4F6' }}
+                        contentFit="cover"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F0F0F' }}>{channelConfig.channelName}</Text>
+                        <Text style={{ fontSize: 11, color: '#606060' }} numberOfLines={1}>{channelConfig.channelUrl}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Channel Name */}
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#606060', marginBottom: 6 }}>チャンネル名 <Text style={{ color: '#EF4444' }}>*</Text></Text>
+                  <TextInput
+                    value={channelNameInput}
+                    onChangeText={setChannelNameInput}
+                    placeholder="例: 三崎優太"
+                    placeholderTextColor="#9CA3AF"
+                    style={{
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      fontSize: 14,
+                      color: '#0F0F0F',
+                      marginBottom: 14,
+                    }}
+                    returnKeyType="next"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  {/* Icon Image URL */}
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#606060', marginBottom: 6 }}>アイコン画像 URL</Text>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 6, lineHeight: 16 }}>
+                    YouTubeのチャンネルアイコンをブラウザで長押し → 「画像アドレスをコピー」で取得できます。
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    {channelIconUrlInput.trim() ? (
+                      <Image
+                        source={{ uri: channelIconUrlInput.trim() }}
+                        style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 18 }}>📷</Text>
+                      </View>
+                    )}
+                    <TextInput
+                      value={channelIconUrlInput}
+                      onChangeText={setChannelIconUrlInput}
+                      placeholder="https://yt3.googleusercontent.com/..."
+                      placeholderTextColor="#9CA3AF"
+                      style={{
+                        flex: 1,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                        borderRadius: 12,
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        fontSize: 13,
+                        color: '#0F0F0F',
+                      }}
+                      returnKeyType="next"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+
+                  {/* Channel URL (optional) */}
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#606060', marginBottom: 6 }}>チャンネルURL（任意）</Text>
+                  <TextInput
+                    value={channelUrlInput}
+                    onChangeText={setChannelUrlInput}
+                    placeholder="https://www.youtube.com/@handle"
+                    placeholderTextColor="#9CA3AF"
+                    style={{
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      fontSize: 14,
+                      color: '#0F0F0F',
+                      marginBottom: 16,
+                    }}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSaveChannelUrl}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoFocus={false}
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity
+                      onPress={() => { setShowChannelModal(false); setChannelUrlInput(''); setChannelIconUrlInput(''); setChannelNameInput(''); Keyboard.dismiss(); }}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center' }}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: '#606060' }}>キャンセル</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSaveChannelUrl}
+                      disabled={isFetchingChannel}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: isFetchingChannel ? '#9CA3AF' : '#FF0000', alignItems: 'center' }}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>{isFetchingChannel ? '取得中...' : '保存'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  </ScrollView>
                 </View>
-              </View>
-            )}
-
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#606060', marginBottom: 6 }}>チャンネルURL</Text>
-            <TextInput
-              value={channelUrlInput}
-              onChangeText={setChannelUrlInput}
-              placeholder="https://www.youtube.com/@handle"
-              placeholderTextColor="#9CA3AF"
-              style={{
-                borderWidth: 1,
-                borderColor: '#E5E7EB',
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                fontSize: 14,
-                color: '#0F0F0F',
-                marginBottom: 16,
-              }}
-              returnKeyType="done"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity
-                onPress={() => { setShowChannelModal(false); setChannelUrlInput(''); }}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#606060' }}>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSaveChannelUrl}
-                disabled={isFetchingChannel}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: isFetchingChannel ? '#9CA3AF' : '#FF0000', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>{isFetchingChannel ? '取得中...' : '保存'}</Text>
-              </TouchableOpacity>
+              </TouchableWithoutFeedback>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </ScreenContainer>
   );
