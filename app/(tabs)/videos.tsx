@@ -4,7 +4,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { useVideos } from "@/lib/data/use-analytics";
 import { VideoData, VideoFilter } from "@/lib/data/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
@@ -108,13 +109,13 @@ export default function VideosScreen() {
   const [videoFilter, setVideoFilter] = useState<VideoFilter>(params.filter || 'all');
   const [gradeFilter, setGradeFilter] = useState<string | null>(params.grade || null);
 
-  const allVideos = useMemo(() => parseVideoData(), []);
+  const { videos: allVideos } = useVideos('all');
 
   const counts = useMemo(() => ({
     all: allVideos.length,
-    regular: allVideos.filter(v => !v.isShort && !v.isPrivate).length,
-    short: allVideos.filter(v => v.isShort).length,
-    private: allVideos.filter(v => v.isPrivate).length,
+    regular: allVideos.filter((v: VideoData) => !v.isShort && !v.isPrivate).length,
+    short: allVideos.filter((v: VideoData) => v.isShort).length,
+    private: allVideos.filter((v: VideoData) => v.isPrivate).length,
   }), [allVideos]);
 
   const filteredVideos = useMemo(() => {

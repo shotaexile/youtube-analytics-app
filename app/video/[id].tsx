@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { useVideos } from "@/lib/data/use-analytics";
 import { analyzeVideo } from "@/lib/data/ai-analysis";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
@@ -33,7 +34,8 @@ export default function VideoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const video = useMemo(() => parseVideoData().find(v => v.id === id), [id]);
+  const { videos: allVideos } = useVideos('all');
+  const video = useMemo(() => allVideos.find(v => v.id === id), [allVideos, id]);
   const analysis = useMemo(() => video ? analyzeVideo(video) : null, [video]);
   const { grade, score } = useMemo(() => video ? calculatePerformanceScore(video) : { grade: 'D' as const, score: 0 }, [video]);
 

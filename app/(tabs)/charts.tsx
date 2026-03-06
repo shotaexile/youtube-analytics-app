@@ -2,7 +2,8 @@ import { ScrollView, Text, View, TouchableOpacity, Dimensions } from "react-nati
 import { useState, useMemo } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, getMonthlyStats, formatNumber, getDayOfWeekStats, getHourOfDayStats, getCategoryStats } from "@/lib/data/csv-parser";
+import { formatNumber, getDayOfWeekStats, getHourOfDayStats, getCategoryStats } from "@/lib/data/csv-parser";
+import { useVideos, useMonthlyStats } from "@/lib/data/use-analytics";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -199,8 +200,8 @@ function ScatterPlot({ videos }: { videos: any[] }) {
 
 export default function ChartsScreen() {
   const [activeTab, setActiveTab] = useState<ChartTab>('monthly');
-  const videos = useMemo(() => parseVideoData(), []);
-  const monthlyStats = useMemo(() => getMonthlyStats(), []);
+  const { videos } = useVideos('all');
+  const { stats: monthlyStats } = useMonthlyStats(24);
   const dayOfWeekStats = useMemo(() => getDayOfWeekStats(), []);
   const monthlyPatternStats = useMemo(() => getHourOfDayStats(), []);
   const categoryStats = useMemo(() => getCategoryStats(), []);

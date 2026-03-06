@@ -4,7 +4,8 @@ import { useState, useMemo } from "react";
 import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, formatNumber, formatRevenue } from "@/lib/data/csv-parser";
+import { formatNumber, formatRevenue } from "@/lib/data/csv-parser";
+import { useVideos } from "@/lib/data/use-analytics";
 import { RankingType, PeriodFilter, VideoFilter } from "@/lib/data/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
@@ -51,8 +52,9 @@ export default function RankingsScreen() {
 
   const currentType = RANKING_TYPES.find(t => t.key === rankingType)!;
 
+  const { videos: allVideos } = useVideos('all');
+
   const videos = useMemo(() => {
-    const allVideos = parseVideoData();
     let filtered = allVideos;
 
     // Period filter

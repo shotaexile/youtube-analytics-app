@@ -3,7 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity, FlatList, Linking } from "rea
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { parseVideoData, formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
+import { useVideos } from "@/lib/data/use-analytics";
 
 const GRADE_COLORS = {
   S: { bg: '#FFF7ED', text: '#EA580C', border: '#FED7AA' },
@@ -17,10 +18,7 @@ export default function PrivateVideosScreen() {
   const router = useRouter();
   const [sortBy, setSortBy] = useState<'views' | 'date' | 'grade'>('views');
 
-  const privateVideos = useMemo(() => {
-    const all = parseVideoData();
-    return all.filter(v => v.isPrivate);
-  }, []);
+  const { videos: privateVideos } = useVideos('private');
 
   const sortedVideos = useMemo(() => {
     return [...privateVideos].sort((a, b) => {

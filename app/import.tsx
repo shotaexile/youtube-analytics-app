@@ -1,23 +1,22 @@
 import { Text, View, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { saveCustomCSV, clearCustomCSV, hasCustomCSV } from "@/lib/data/csv-store";
-import { invalidateCache } from "@/lib/data/csv-parser";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { trpc } from "@/lib/trpc";
 
 export default function ImportScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [hasCustomData, setHasCustomData] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    hasCustomCSV().then(setHasCustomData);
-  }, []);
+  const lastUploadQuery = trpc.analytics.getLastUpload.useQuery(undefined, { staleTime: 10_000 });
+  const hasDataQuery = trpc.analytics.hasData.useQuery(undefined, { staleTime: 10_000 });
+  const uploadCSVMutation = trpc.analytics.uploadCSV.useMutation();
+  const utils = trpc.useUtils();
 
   const handleImport = async () => {
     try {
@@ -39,11 +38,9 @@ export default function ImportScreen() {
       let csvContent: string;
 
       if (Platform.OS === 'web') {
-        // Web: fetch from URI
         const response = await fetch(asset.uri);
         csvContent = await response.text();
       } else {
-        // Native: read file
         csvContent = await FileSystem.readAsStringAsync(asset.uri, {
           encoding: FileSystem.EncodingType.UTF8,
         });
@@ -55,22 +52,23 @@ export default function ImportScreen() {
         throw new Error('CSVファイルのデータが少なすぎます（最低2行のデータが必要です）');
       }
 
-      // Check for expected columns
       const header = lines[0];
       if (!header.includes('コンテンツ') && !header.includes('動画のタイトル') && !header.includes('視聴回数')) {
         throw new Error('YouTubeアナリティクスのCSVファイルではありません。\n正しいファイルを選択してください。');
       }
 
-      // Save to AsyncStorage
-      await saveCustomCSV(csvContent);
+      // Upload to DB (server-side, shared across all users)
+      const uploadResult = await uploadCSVMutation.mutateAsync({ csvContent });
 
-      // Invalidate parser cache
-      invalidateCache();
+      // Invalidate all analytics queries so all screens refresh
+      await utils.analytics.invalidate();
 
-      const dataLines = lines.length - 2; // subtract header and total row
-      setHasCustomData(true);
       setStatus('success');
-      setMessage(`✅ ${dataLines}本の動画データを読み込みました`);
+      setMessage(`✅ ${uploadResult.videoCount}本の動画データをサーバーに保存しました\n\nチームメンバー全員のアプリに即時反映されます。`);
+
+      // Refresh last upload info
+      lastUploadQuery.refetch();
+      hasDataQuery.refetch();
 
     } catch (err: any) {
       setStatus('error');
@@ -80,25 +78,13 @@ export default function ImportScreen() {
     }
   };
 
-  const handleReset = () => {
-    Alert.alert(
-      'データをリセット',
-      '読み込んだCSVデータを削除して、デフォルトデータに戻しますか？',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: 'リセット',
-          style: 'destructive',
-          onPress: async () => {
-            await clearCustomCSV();
-            invalidateCache();
-            setHasCustomData(false);
-            setStatus('idle');
-            setMessage('');
-          },
-        },
-      ]
-    );
+  const lastUpload = lastUploadQuery.data;
+  const hasDbData = hasDataQuery.data === true;
+
+  const formatDate = (d: Date | string | null | undefined) => {
+    if (!d) return '';
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
   };
 
   return (
@@ -109,19 +95,41 @@ export default function ImportScreen() {
           <TouchableOpacity onPress={() => router.back()} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
             <IconSymbol name="chevron.right" size={18} color="#0F0F0F" style={{ transform: [{ scaleX: -1 }] }} />
           </TouchableOpacity>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F' }}>CSVデータ更新</Text>
+          <View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F' }}>CSVデータ更新</Text>
+            <Text style={{ fontSize: 11, color: '#606060', marginTop: 1 }}>チーム全員に即時反映</Text>
+          </View>
         </View>
 
         <View style={{ padding: 16, gap: 16 }}>
-          {/* Current Status */}
+          {/* DB Status Card */}
           <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>現在のデータ状態</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: hasCustomData ? '#F0FDF4' : '#FFF5F5', borderRadius: 12 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: hasCustomData ? '#22C55E' : '#F59E0B' }} />
-              <Text style={{ fontSize: 13, color: hasCustomData ? '#16A34A' : '#D97706', fontWeight: '600' }}>
-                {hasCustomData ? 'カスタムCSVデータを使用中' : 'デフォルトデータを使用中（三崎優太 2022-2026）'}
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>サーバーデータ状態</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: hasDbData ? '#F0FDF4' : '#FFF5F5', borderRadius: 12, marginBottom: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: hasDbData ? '#22C55E' : '#F59E0B' }} />
+              <Text style={{ fontSize: 13, color: hasDbData ? '#16A34A' : '#D97706', fontWeight: '600', flex: 1 }}>
+                {hasDbData ? 'サーバーDBにデータあり（チーム共有中）' : 'サーバーDBにデータなし（デフォルトデータを表示中）'}
               </Text>
             </View>
+            {lastUpload && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 12, color: '#9CA3AF' }}>最終更新</Text>
+                <Text style={{ fontSize: 12, color: '#606060', fontWeight: '600' }}>
+                  {formatDate(lastUpload.createdAt)} · {lastUpload.videoCount}本
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Team Sync Explanation */}
+          <View style={{ backgroundColor: '#EFF6FF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Text style={{ fontSize: 16 }}>🔄</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E40AF' }}>チーム共有の仕組み</Text>
+            </View>
+            <Text style={{ fontSize: 13, color: '#1E40AF', lineHeight: 20 }}>
+              CSVをアップロードすると、サーバーのデータベースに保存されます。チームメンバーがアプリを開くと、自動的に最新データが表示されます。
+            </Text>
           </View>
 
           {/* Import Instructions */}
@@ -188,24 +196,14 @@ export default function ImportScreen() {
               <IconSymbol name="paperplane.fill" size={18} color="white" />
             )}
             <Text style={{ fontSize: 16, color: 'white', fontWeight: '800' }}>
-              {isLoading ? '読み込み中...' : 'CSVファイルを選択して読み込む'}
+              {isLoading ? 'サーバーに保存中...' : 'CSVを選択してチームに共有'}
             </Text>
           </TouchableOpacity>
-
-          {/* Reset Button */}
-          {hasCustomData && (
-            <TouchableOpacity
-              onPress={handleReset}
-              style={{ borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB' }}
-            >
-              <Text style={{ fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>デフォルトデータに戻す</Text>
-            </TouchableOpacity>
-          )}
 
           {/* Note */}
           <View style={{ backgroundColor: '#FFFBEB', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FDE68A' }}>
             <Text style={{ fontSize: 12, color: '#92400E', lineHeight: 18 }}>
-              📌 読み込んだデータはこのデバイスに保存されます。アプリを再起動しても保持されます。新しいCSVを読み込むと前のデータは上書きされます。
+              📌 アップロードしたデータはサーバーに保存され、チームメンバー全員のアプリに即時反映されます。新しいCSVをアップロードすると前のデータは上書きされます。
             </Text>
           </View>
         </View>

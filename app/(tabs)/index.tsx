@@ -4,12 +4,13 @@ import { useMemo, useState, useEffect } from "react";
 import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { parseVideoData, getChannelSummary, getMonthlyStats, formatNumber, formatRevenue } from "@/lib/data/csv-parser";
+import { formatNumber, formatRevenue } from "@/lib/data/csv-parser";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { getChannelConfig, saveChannelConfig, extractChannelId, ChannelConfig } from "@/lib/data/channel-config";
 import { VideoFilter } from "@/lib/data/types";
 import { trpc } from "@/lib/trpc";
 import { getApiBaseUrl } from "@/constants/oauth";
+import { useVideos, useChannelSummary, useMonthlyStats } from "@/lib/data/use-analytics";
 
 function SummaryCard({ label, value, icon, color }: { label: string; value: string; icon: any; color: string }) {
   return (
@@ -73,19 +74,22 @@ export default function DashboardScreen() {
     getChannelConfig().then(setChannelConfig);
   }, []);
 
-  const summary = useMemo(() => getChannelSummary(), []);
-  const monthlyStats = useMemo(() => getMonthlyStats(), []);
-  const allVideos = useMemo(() => parseVideoData(), []);
+  const { summary: summaryData } = useChannelSummary();
+  const { stats: monthlyStatsData } = useMonthlyStats(24);
+  const { videos: allVideos } = useVideos('all');
+
+  // Use local fallback if DB data not available yet
+  const summary = summaryData || { totalViews: 0, totalRevenue: 0, totalImpressions: 0, avgCtr: 0, avgLikeRate: 0, avgViewRate: 0, totalSubscriberChange: 0, videoCount: 0, shortCount: 0, regularCount: 0, privateCount: 0 };
 
   const filteredVideos = useMemo(() => {
-    let videos = allVideos;
-    if (videoFilter === 'regular') videos = videos.filter(v => !v.isShort && !v.isPrivate);
-    else if (videoFilter === 'short') videos = videos.filter(v => v.isShort);
-    else if (videoFilter === 'private') videos = videos.filter(v => v.isPrivate);
-    return videos.slice(0, 15);
+    let vids = allVideos;
+    if (videoFilter === 'regular') vids = vids.filter((v: typeof allVideos[0]) => !v.isShort && !v.isPrivate);
+    else if (videoFilter === 'short') vids = vids.filter((v: typeof allVideos[0]) => v.isShort);
+    else if (videoFilter === 'private') vids = vids.filter((v: typeof allVideos[0]) => v.isPrivate);
+    return vids.slice(0, 15);
   }, [allVideos, videoFilter]);
 
-  const last12Months = useMemo(() => monthlyStats.slice(-12), [monthlyStats]);
+  const last12Months = useMemo(() => monthlyStatsData.slice(-12), [monthlyStatsData]);
 
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
   const channelInfoQuery = trpc.youtube.channelInfo.useQuery(
