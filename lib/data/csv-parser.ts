@@ -546,11 +546,22 @@ function parseCSVLine(line: string): string[] {
 }
 
 let _cachedVideos: VideoData[] | null = null;
+let _customCSVContent: string | null = null;
+
+export function invalidateCache(): void {
+  _cachedVideos = null;
+}
+
+export function setCustomCSVContent(content: string | null): void {
+  _customCSVContent = content;
+  _cachedVideos = null;
+}
 
 export function parseVideoData(): VideoData[] {
   if (_cachedVideos) return _cachedVideos;
   
-  const lines = RAW_CSV.split('\n').slice(1); // skip header
+  const csvSource = _customCSVContent || RAW_CSV;
+  const lines = csvSource.split('\n').slice(1); // skip header
   const videos: VideoData[] = [];
   
   for (const line of lines) {

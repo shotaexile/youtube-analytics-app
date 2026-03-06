@@ -1,4 +1,5 @@
-import { Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useState, useMemo } from "react";
 
@@ -28,6 +29,7 @@ const GRADE_COLORS: Record<string, string> = {
 function VideoCard({ video }: { video: VideoData }) {
   const router = useRouter();
   const { grade, score } = calculatePerformanceScore(video);
+  const thumbnailUrl = `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`;
 
   return (
     <TouchableOpacity
@@ -36,17 +38,20 @@ function VideoCard({ video }: { video: VideoData }) {
         flexDirection: 'row',
         backgroundColor: 'white',
         borderRadius: 14,
-        padding: 12,
+        padding: 10,
         marginBottom: 8,
         shadowColor: '#000',
         shadowOpacity: 0.04,
         shadowRadius: 6,
         elevation: 1,
+        gap: 10,
       }}
     >
-      <View style={{ width: 80, height: 52, borderRadius: 8, backgroundColor: '#FF000015', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-        <IconSymbol name="play.rectangle.fill" size={24} color="#FF0000" />
-      </View>
+      <Image
+        source={{ uri: thumbnailUrl }}
+        style={{ width: 100, height: 56, borderRadius: 8, backgroundColor: '#F3F4F6' }}
+        contentFit="cover"
+      />
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 13, fontWeight: '600', color: '#0F0F0F', marginBottom: 6, lineHeight: 18 }} numberOfLines={2}>{video.title}</Text>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>

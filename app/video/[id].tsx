@@ -1,6 +1,7 @@
 import { ScrollView, Text, View, TouchableOpacity } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
+import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { parseVideoData, formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
@@ -61,6 +62,12 @@ export default function VideoDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Thumbnail */}
+        <Image
+          source={{ uri: `https://img.youtube.com/vi/${video.id}/maxresdefault.jpg` }}
+          style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: '#F3F4F6' }}
+          contentFit="cover"
+        />
         <View style={{ backgroundColor: 'white', padding: 16, marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <View style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#FF000015', borderRadius: 6 }}>

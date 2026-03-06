@@ -1,6 +1,7 @@
-import { ScrollView, Text, View, TouchableOpacity, FlatList } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { useState, useMemo } from "react";
+import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { getTopVideos, formatNumber, formatRevenue } from "@/lib/data/csv-parser";
@@ -121,20 +122,25 @@ export default function RankingsScreen() {
                 borderLeftColor: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
               }}
             >
-              <View style={{ width: 36, alignItems: 'center', marginRight: 10 }}>
+              <View style={{ width: 32, alignItems: 'center', marginRight: 8 }}>
                 <MedalIcon rank={index + 1} />
               </View>
+              <Image
+                source={{ uri: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg` }}
+                style={{ width: 88, height: 50, borderRadius: 6, backgroundColor: '#F3F4F6', marginRight: 10 }}
+                contentFit="cover"
+              />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#0F0F0F', marginBottom: 4 }} numberOfLines={2}>{video.title}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: currentType.color + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <IconSymbol name={currentType.icon} size={12} color={currentType.color} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: currentType.color }}>{currentType.format(getValue(video))}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F0F0F', marginBottom: 4, lineHeight: 17 }} numberOfLines={2}>{video.title}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: currentType.color + '15', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 }}>
+                    <IconSymbol name={currentType.icon} size={11} color={currentType.color} />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: currentType.color }}>{currentType.format(getValue(video))}</Text>
                   </View>
-                  <Text style={{ fontSize: 11, color: '#606060' }}>{video.publishedAt}</Text>
+                  <Text style={{ fontSize: 10, color: '#9CA3AF' }}>{video.publishedAt}</Text>
                 </View>
               </View>
-              <IconSymbol name="chevron.right" size={16} color="#C0C0C0" />
+              <IconSymbol name="chevron.right" size={14} color="#C0C0C0" />
             </TouchableOpacity>
           ))}
           {videos.length === 0 && (

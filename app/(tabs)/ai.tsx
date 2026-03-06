@@ -1,5 +1,6 @@
 import { ScrollView, Text, View, TouchableOpacity } from "react-native";
 import { useState, useMemo } from "react";
+import { useRouter } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { parseVideoData, getChannelSummary, formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
@@ -42,6 +43,7 @@ function ActionItem({ action, index }: { action: string; index: number }) {
 }
 
 export default function AIScreen() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<'insights' | 'actions' | 'grades'>('insights');
 
   const videos = useMemo(() => parseVideoData(), []);
@@ -152,20 +154,30 @@ export default function AIScreen() {
                 {Object.entries(gradeDistribution).map(([grade, count]) => {
                   const pct = (count / videos.length) * 100;
                   return (
-                    <View key={grade} style={{ marginBottom: 12 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: GRADE_COLORS[grade] + '20', alignItems: 'center', justifyContent: 'center' }}>
-                            <Text style={{ fontSize: 13, fontWeight: '800', color: GRADE_COLORS[grade] }}>{grade}</Text>
+                    <TouchableOpacity
+                      key={grade}
+                      onPress={() => router.push({ pathname: '/grade-videos' as any, params: { grade } })}
+                      style={{ marginBottom: 14 }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: GRADE_COLORS[grade] + '20', alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ fontSize: 15, fontWeight: '900', color: GRADE_COLORS[grade] }}>{grade}</Text>
                           </View>
-                          <Text style={{ fontSize: 13, color: '#0F0F0F', fontWeight: '600' }}>{count}本</Text>
+                          <View>
+                            <Text style={{ fontSize: 13, color: '#0F0F0F', fontWeight: '700' }}>{count}本</Text>
+                            <Text style={{ fontSize: 10, color: '#9CA3AF' }}>タップして一覧を見る</Text>
+                          </View>
                         </View>
-                        <Text style={{ fontSize: 13, color: '#606060' }}>{pct.toFixed(1)}%</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: GRADE_COLORS[grade] }}>{pct.toFixed(1)}%</Text>
+                          <IconSymbol name="chevron.right" size={14} color="#C0C0C0" />
+                        </View>
                       </View>
-                      <View style={{ height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}>
-                        <View style={{ width: `${pct}%` as any, height: 8, backgroundColor: GRADE_COLORS[grade], borderRadius: 4 }} />
+                      <View style={{ height: 10, backgroundColor: '#F3F4F6', borderRadius: 5, overflow: 'hidden' }}>
+                        <View style={{ width: `${pct}%` as any, height: 10, backgroundColor: GRADE_COLORS[grade], borderRadius: 5 }} />
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
