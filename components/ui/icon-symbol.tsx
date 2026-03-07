@@ -31,6 +31,7 @@ const MAPPING = {
   "info.circle.fill": "info",
   "magnifyingglass": "search",
   "xmark": "close",
+  "xmark.circle.fill": "cancel",
   "slider.horizontal.3": "tune",
   "play.fill": "play-arrow",
   "doc.fill": "description",

@@ -108,6 +108,24 @@ export default function DashboardScreen() {
   const last12Months = useMemo(() => monthlyStatsData.slice(-12), [monthlyStatsData]);
 
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
+  // AI Bot state
+  const [showBotModal, setShowBotModal] = useState(false);
+  const [botQuestion, setBotQuestion] = useState('');
+  const [botMessages, setBotMessages] = useState<{ role: 'user' | 'bot'; text: string }[]>([]);
+  const askBotMutation = trpc.analytics.askBot.useMutation();
+  const handleAskBot = async () => {
+    const q = botQuestion.trim();
+    if (!q) return;
+    setBotQuestion('');
+    Keyboard.dismiss();
+    setBotMessages(prev => [...prev, { role: 'user', text: q }]);
+    try {
+      const res = await askBotMutation.mutateAsync({ question: q });
+      setBotMessages(prev => [...prev, { role: 'bot', text: res.answer }]);
+    } catch (e: any) {
+      setBotMessages(prev => [...prev, { role: 'bot', text: e?.message || 'エラーが発生しました。再度お試しください。' }]);
+    }
+  };
   const channelInfoQuery = trpc.youtube.channelInfo.useQuery(
     { channelUrl: channelUrlInput },
     { enabled: false }
@@ -196,13 +214,22 @@ export default function DashboardScreen() {
                 <Text style={{ fontSize: 11, color: '#606060' }}>YouTubeアナリティクス</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push('/import' as any)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 }}
-            >
-              <IconSymbol name="paperplane.fill" size={14} color="#606060" />
-              <Text style={{ fontSize: 12, color: '#606060', fontWeight: '600' }}>CSV更新</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setShowBotModal(true)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 }}
+              >
+                <IconSymbol name="brain.head.profile" size={14} color="#FF0000" />
+                <Text style={{ fontSize: 12, color: '#FF0000', fontWeight: '600' }}>AI Bot</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/import' as any)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 }}
+              >
+                <IconSymbol name="paperplane.fill" size={14} color="#606060" />
+                <Text style={{ fontSize: 12, color: '#606060', fontWeight: '600' }}>CSV更新</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -497,6 +524,112 @@ export default function DashboardScreen() {
                     </TouchableOpacity>
                   </View>
                   </ScrollView>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* AI Bot Modal */}
+      <Modal visible={showBotModal} animationType="slide" transparent presentationStyle="overFullScreen">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); }}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+              <TouchableWithoutFeedback>
+                <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '80%' }}>
+                  {/* Header */}
+                  <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFF0F0', alignItems: 'center', justifyContent: 'center' }}>
+                        <IconSymbol name="brain.head.profile" size={18} color="#FF0000" />
+                      </View>
+                      <View>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F0F0F' }}>AI アナリスト</Text>
+                        <Text style={{ fontSize: 11, color: '#606060' }}>チャンネルデータについて質問できます</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setShowBotModal(false)} style={{ padding: 4 }}>
+                      <IconSymbol name="xmark.circle.fill" size={24} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  </View>
+                  {/* Messages */}
+                  <ScrollView style={{ flex: 1, paddingHorizontal: 16 }} contentContainerStyle={{ paddingVertical: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
+                    {botMessages.length === 0 && (
+                      <View style={{ gap: 8 }}>
+                        <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>こんな質問ができます</Text>
+                        {['今月登録者何人増えた？', '伸びてる動画の共通点は？', '先月と比べて今月の数字の変化は？', 'どの動画をもっと伸ばすべき？'].map((q) => (
+                          <TouchableOpacity
+                            key={q}
+                            onPress={() => { setBotQuestion(q); }}
+                            style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 }}
+                          >
+                            <Text style={{ fontSize: 13, color: '#374151' }}>💬 {q}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    {botMessages.map((msg, i) => (
+                      <View key={i} style={{ alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                        {msg.role === 'bot' && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFF0F0', alignItems: 'center', justifyContent: 'center' }}>
+                              <IconSymbol name="brain.head.profile" size={11} color="#FF0000" />
+                            </View>
+                            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>AI アナリスト</Text>
+                          </View>
+                        )}
+                        <View style={{
+                          maxWidth: '85%',
+                          backgroundColor: msg.role === 'user' ? '#FF0000' : '#F3F4F6',
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          borderRadius: 16,
+                          borderBottomRightRadius: msg.role === 'user' ? 4 : 16,
+                          borderBottomLeftRadius: msg.role === 'bot' ? 4 : 16,
+                        }}>
+                          <Text style={{ fontSize: 14, color: msg.role === 'user' ? 'white' : '#0F0F0F', lineHeight: 20 }}>{msg.text}</Text>
+                        </View>
+                      </View>
+                    ))}
+                    {askBotMutation.isPending && (
+                      <View style={{ alignItems: 'flex-start' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFF0F0', alignItems: 'center', justifyContent: 'center' }}>
+                            <IconSymbol name="brain.head.profile" size={11} color="#FF0000" />
+                          </View>
+                          <Text style={{ fontSize: 11, color: '#9CA3AF' }}>AI アナリスト</Text>
+                        </View>
+                        <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderBottomLeftRadius: 4 }}>
+                          <Text style={{ fontSize: 14, color: '#9CA3AF' }}>分析中...</Text>
+                        </View>
+                      </View>
+                    )}
+                  </ScrollView>
+                  {/* Input */}
+                  <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: '#E5E5E5', flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+                    <TextInput
+                      value={botQuestion}
+                      onChangeText={setBotQuestion}
+                      placeholder="チャンネルについて質問する..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      style={{ flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: '#0F0F0F', maxHeight: 80 }}
+                      returnKeyType="send"
+                      onSubmitEditing={handleAskBot}
+                    />
+                    <TouchableOpacity
+                      onPress={handleAskBot}
+                      disabled={!botQuestion.trim() || askBotMutation.isPending}
+                      style={{
+                        width: 40, height: 40, borderRadius: 20,
+                        backgroundColor: botQuestion.trim() && !askBotMutation.isPending ? '#FF0000' : '#E5E5E5',
+                        alignItems: 'center', justifyContent: 'center'
+                      }}
+                    >
+                      <IconSymbol name="paperplane.fill" size={16} color="white" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </TouchableWithoutFeedback>
             </View>

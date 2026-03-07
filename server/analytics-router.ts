@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
+import { invokeLLM } from "./_core/llm";
 import {
   videos,
   monthlyStats,
@@ -490,4 +491,85 @@ export const analyticsRouter = router({
       .limit(1);
     return rows[0] || null;
   }),
+
+  // ── AI Bot ────────────────────────────────────────────────────────────────
+  // Answer questions about the channel analytics using LLM
+  askBot: publicProcedure
+    .input(z.object({ question: z.string().max(500) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // Fetch all videos
+      const allVideos = await db.select().from(videos).orderBy(desc(videos.publishedDate));
+      if (allVideos.length === 0) throw new Error("データがありません。CSVをアップロードしてください。");
+
+      // Fetch monthly stats
+      const allMonthly = await db.select().from(monthlyStats).orderBy(asc(monthlyStats.month));
+
+      // Fetch channel config
+      const channelRows = await db.select().from(channelConfig).limit(1);
+      const channel = channelRows[0];
+
+      // Build a compact data summary for the LLM
+      const totalVideos = allVideos.length;
+      const publicVideos = allVideos.filter((v) => !v.isPrivate);
+      const shortVideos = publicVideos.filter((v) => v.isShort);
+      const regularVideos = publicVideos.filter((v) => !v.isShort);
+      const totalViews = publicVideos.reduce((s, v) => s + v.views, 0);
+      const totalRevenue = publicVideos.reduce((s, v) => s + v.estimatedRevenue, 0);
+      const totalSubscriberChange = publicVideos.reduce((s, v) => s + v.subscriberChange, 0);
+      const avgCtr = publicVideos.length > 0 ? publicVideos.reduce((s, v) => s + v.ctr, 0) / publicVideos.length : 0;
+      const avgViewRate = publicVideos.length > 0 ? publicVideos.reduce((s, v) => s + v.avgViewRate, 0) / publicVideos.length : 0;
+
+      // Top 10 videos by views
+      const top10 = [...publicVideos]
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 10)
+        .map((v) => `  - 「${v.title}」 再生:${v.views.toLocaleString()} CTR:${(v.ctr * 100).toFixed(1)}% 視聴維持率:${(v.avgViewRate * 100).toFixed(1)}% 登録者増減:${v.subscriberChange > 0 ? '+' : ''}${v.subscriberChange} ${v.isShort ? '[ショート]' : '[通常]'} 投稿:${v.publishedAt}`);
+
+      // Monthly stats summary
+      const monthlySummary = allMonthly.map((m) =>
+        `  ${m.month}: 再生${m.views.toLocaleString()} 収益¥${Math.round(m.revenue).toLocaleString()} 投稿${m.videoCount}本 登録者${m.subscriberChange > 0 ? '+' : ''}${m.subscriberChange}`
+      );
+
+      // Recent 5 videos
+      const recent5 = allVideos.slice(0, 5).map((v) =>
+        `  - 「${v.title}」 再生:${v.views.toLocaleString()} 投稿:${v.publishedAt} ${v.isShort ? '[ショート]' : '[通常]'}`
+      );
+
+      const systemPrompt = `あなたは「${channel?.channelName || 'ViewCore'}」というYouTubeチャンネルの専属アナリストです。
+以下のチャンネルデータを元に、チームメンバーの質問に日本語で具体的・簡潔に回答してください。
+数値は必ず実際のデータを使用し、推測や一般論は避けてください。
+回答は3〜5文程度でまとめ、重要な数値を太字（**数値**）で強調してください。
+
+【チャンネル概要】
+- チャンネル名: ${channel?.channelName || '不明'}
+- 総動画数: ${totalVideos}本（公開: ${publicVideos.length}本、ショート: ${shortVideos.length}本、通常: ${regularVideos.length}本）
+- 総再生数: ${totalViews.toLocaleString()}
+- 総収益: ¥${Math.round(totalRevenue).toLocaleString()}
+- 総登録者増減: ${totalSubscriberChange > 0 ? '+' : ''}${totalSubscriberChange.toLocaleString()}
+- 平均CTR: ${(avgCtr * 100).toFixed(2)}%
+- 平均視聴維持率: ${(avgViewRate * 100).toFixed(1)}%
+
+【月別データ】
+${monthlySummary.join('\n')}
+
+【再生数トップ10動画】
+${top10.join('\n')}
+
+【最新5本の動画】
+${recent5.join('\n')}`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: input.question },
+        ],
+      });
+
+      const rawContent = response.choices?.[0]?.message?.content;
+      const answer = typeof rawContent === 'string' ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '回答を生成できませんでした。');
+      return { answer };
+    }),
 });
