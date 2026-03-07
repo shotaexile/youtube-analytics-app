@@ -1,8 +1,7 @@
-import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput, Alert } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
@@ -10,9 +9,9 @@ import { useVideos } from "@/lib/data/use-analytics";
 import { VideoData, VideoFilter } from "@/lib/data/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
-const AUTH_STORAGE_KEY = 'auth_v2';
-
 type SortType = 'date' | 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers';
+
+type DateRangeFilter = 'all' | 'thisMonth' | 'lastMonth' | '3months' | '6months' | '1year';
 
 const SORT_OPTIONS: { key: SortType; label: string }[] = [
   { key: 'date', label: '新しい順' },
@@ -30,6 +29,15 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
   { key: 'private', label: '非公開', color: '#9CA3AF' },
 ];
 
+const DATE_RANGE_FILTERS: { key: DateRangeFilter; label: string }[] = [
+  { key: 'all', label: '全期間' },
+  { key: 'thisMonth', label: '今月' },
+  { key: 'lastMonth', label: '先月' },
+  { key: '3months', label: '3ヶ月' },
+  { key: '6months', label: '6ヶ月' },
+  { key: '1year', label: '1年' },
+];
+
 const GRADE_COLORS: Record<string, string> = {
   S: '#FF0000',
   A: '#F59E0B',
@@ -37,6 +45,32 @@ const GRADE_COLORS: Record<string, string> = {
   C: '#3B82F6',
   D: '#9CA3AF',
 };
+
+function getDateRangeStart(filter: DateRangeFilter): Date | null {
+  const now = new Date();
+  switch (filter) {
+    case 'thisMonth':
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case 'lastMonth':
+      return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    case '3months':
+      return new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    case '6months':
+      return new Date(now.getFullYear(), now.getMonth() - 6, 1);
+    case '1year':
+      return new Date(now.getFullYear() - 1, now.getMonth(), 1);
+    default:
+      return null;
+  }
+}
+
+function getDateRangeEnd(filter: DateRangeFilter): Date | null {
+  const now = new Date();
+  if (filter === 'lastMonth') {
+    return new Date(now.getFullYear(), now.getMonth(), 0); // last day of last month
+  }
+  return null;
+}
 
 function VideoCard({ video }: { video: VideoData }) {
   const router = useRouter();
@@ -111,26 +145,10 @@ export default function VideosScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [videoFilter, setVideoFilter] = useState<VideoFilter>(params.filter || 'all');
   const [gradeFilter, setGradeFilter] = useState<string | null>(params.grade || null);
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
   const { videos: allVideos } = useVideos('all');
-
-  const handleLogout = () => {
-    Alert.alert(
-      'ログアウト',
-      '本当にログアウトしますか？',
-      [
-        { text: 'キャンセル', onPress: () => {}, style: 'cancel' },
-        {
-          text: 'ログアウト',
-          onPress: async () => {
-            await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-            router.replace('/' as any);
-          },
-          style: 'destructive',
-        },
-      ]
-    );
-  };
 
   const counts = useMemo(() => ({
     all: allVideos.filter((v: VideoData) => !v.isPrivate).length,
@@ -147,6 +165,18 @@ export default function VideosScreen() {
     else if (videoFilter === 'regular') videos = videos.filter(v => !v.isShort && !v.isPrivate);
     else if (videoFilter === 'short') videos = videos.filter(v => v.isShort && !v.isPrivate);
     else if (videoFilter === 'private') videos = videos.filter(v => v.isPrivate);
+
+    // Date range filter
+    if (dateRangeFilter !== 'all') {
+      const startDate = getDateRangeStart(dateRangeFilter);
+      const endDate = getDateRangeEnd(dateRangeFilter);
+      if (startDate) {
+        videos = videos.filter(v => v.publishedDate >= startDate);
+      }
+      if (endDate) {
+        videos = videos.filter(v => v.publishedDate <= endDate);
+      }
+    }
 
     // Grade filter
     if (gradeFilter) {
@@ -173,7 +203,9 @@ export default function VideosScreen() {
         default: return 0;
       }
     });
-  }, [allVideos, searchQuery, sortType, videoFilter, gradeFilter]);
+  }, [allVideos, searchQuery, sortType, videoFilter, gradeFilter, dateRangeFilter]);
+
+  const activeDateLabel = DATE_RANGE_FILTERS.find(f => f.key === dateRangeFilter)?.label || '全期間';
 
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
@@ -188,19 +220,61 @@ export default function VideosScreen() {
           >
             <IconSymbol name="lock.fill" size={16} color="#9CA3AF" />
           </TouchableOpacity>
+          {/* Date range filter button */}
+          <TouchableOpacity
+            onPress={() => setShowDateFilter(!showDateFilter)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              height: 32,
+              paddingHorizontal: 10,
+              borderRadius: 16,
+              backgroundColor: dateRangeFilter !== 'all' ? '#FF0000' : '#F3F4F6',
+              marginRight: 6,
+            }}
+          >
+            <IconSymbol name="calendar" size={14} color={dateRangeFilter !== 'all' ? 'white' : '#606060'} />
+            <Text style={{ fontSize: 11, fontWeight: '600', color: dateRangeFilter !== 'all' ? 'white' : '#606060' }}>
+              {activeDateLabel}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSearch(!showSearch)}
-            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: showSearch ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 6 }}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: showSearch ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}
           >
             <IconSymbol name="magnifyingglass" size={16} color={showSearch ? 'white' : '#606060'} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleLogout}
-            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <IconSymbol name="power" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
         </View>
+
+        {/* Date Range Filter Panel */}
+        {showDateFilter && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+            <View style={{ backgroundColor: '#F8F8F8', borderRadius: 14, padding: 12 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#606060', marginBottom: 8 }}>期間で絞り込む</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {DATE_RANGE_FILTERS.map(f => (
+                  <TouchableOpacity
+                    key={f.key}
+                    onPress={() => { setDateRangeFilter(f.key); setShowDateFilter(false); }}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      borderRadius: 20,
+                      backgroundColor: dateRangeFilter === f.key ? '#FF0000' : 'white',
+                      borderWidth: 1,
+                      borderColor: dateRangeFilter === f.key ? '#FF0000' : '#E5E5E5',
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: dateRangeFilter === f.key ? 'white' : '#374151' }}>
+                      {f.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Search Bar */}
         {showSearch && (

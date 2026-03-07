@@ -42,6 +42,9 @@ const MAPPING = {
   "trash.fill": "delete",
   "link": "link",
   "video.fill": "videocam",
+  "power": "power-settings-new",
+  "calendar": "calendar-today",
+  "calendar.badge.clock": "date-range",
 } as IconMapping;
 
 export function IconSymbol({

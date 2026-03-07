@@ -1,6 +1,6 @@
 import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from "react-native";
 import { useRouter } from "expo-router";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -109,21 +109,80 @@ export default function DashboardScreen() {
 
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
   // AI Bot state
+  const CHAT_HISTORY_KEY = 'viewcore_chat_history_v1';
   const [showBotModal, setShowBotModal] = useState(false);
   const [botQuestion, setBotQuestion] = useState('');
-  const [botMessages, setBotMessages] = useState<{ role: 'user' | 'bot'; text: string }[]>([]);
+  const [botMessages, setBotMessages] = useState<{ role: 'user' | 'bot'; text: string; timestamp?: number }[]>([]);
+  const chatScrollRef = useRef<any>(null);
   const askBotMutation = trpc.analytics.askBot.useMutation();
+
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem(CHAT_HISTORY_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBotMessages(parsed);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // Save chat history to localStorage whenever messages change
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && botMessages.length > 0) {
+        // Keep only last 50 messages to avoid storage bloat
+        const toSave = botMessages.slice(-50);
+        window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(toSave));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [botMessages]);
+
+  const handleClearChatHistory = useCallback(() => {
+    Alert.alert(
+      '履歴を削除',
+      'チャット履歴をすべて削除しますか？',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: () => {
+            setBotMessages([]);
+            try {
+              if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.removeItem(CHAT_HISTORY_KEY);
+              }
+            } catch (e) { /* ignore */ }
+          },
+        },
+      ]
+    );
+  }, []);
+
   const handleAskBot = async () => {
     const q = botQuestion.trim();
     if (!q) return;
     setBotQuestion('');
     Keyboard.dismiss();
-    setBotMessages(prev => [...prev, { role: 'user', text: q }]);
+    const newMsg = { role: 'user' as const, text: q, timestamp: Date.now() };
+    setBotMessages(prev => [...prev, newMsg]);
+    // Scroll to bottom after user message
+    setTimeout(() => chatScrollRef.current?.scrollToEnd?.({ animated: true }), 100);
     try {
       const res = await askBotMutation.mutateAsync({ question: q });
-      setBotMessages(prev => [...prev, { role: 'bot', text: res.answer }]);
+      setBotMessages(prev => [...prev, { role: 'bot', text: res.answer, timestamp: Date.now() }]);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd?.({ animated: true }), 100);
     } catch (e: any) {
-      setBotMessages(prev => [...prev, { role: 'bot', text: e?.message || 'エラーが発生しました。再度お試しください。' }]);
+      setBotMessages(prev => [...prev, { role: 'bot', text: e?.message || 'エラーが発生しました。再度お試しください。', timestamp: Date.now() }]);
     }
   };
   const channelInfoQuery = trpc.youtube.channelInfo.useQuery(
@@ -549,12 +608,19 @@ export default function DashboardScreen() {
                         <Text style={{ fontSize: 11, color: '#606060' }}>チャンネルデータについて質問できます</Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => setShowBotModal(false)} style={{ padding: 4 }}>
-                      <IconSymbol name="xmark.circle.fill" size={24} color="#9CA3AF" />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {botMessages.length > 0 && (
+                        <TouchableOpacity onPress={handleClearChatHistory} style={{ padding: 4 }}>
+                          <IconSymbol name="trash.fill" size={18} color="#9CA3AF" />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity onPress={() => setShowBotModal(false)} style={{ padding: 4 }}>
+                        <IconSymbol name="xmark.circle.fill" size={24} color="#9CA3AF" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   {/* Messages */}
-                  <ScrollView style={{ flex: 1, paddingHorizontal: 16 }} contentContainerStyle={{ paddingVertical: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
+                  <ScrollView ref={chatScrollRef} style={{ flex: 1, paddingHorizontal: 16 }} contentContainerStyle={{ paddingVertical: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
                     {botMessages.length === 0 && (
                       <View style={{ gap: 8 }}>
                         <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>こんな質問ができます</Text>
