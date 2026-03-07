@@ -9,8 +9,12 @@ export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  const safeBottom = Platform.OS === "web" ? 0 : Math.max(insets.bottom, 0);
-  const tabBarHeight = Platform.OS === "web" ? 56 : 60 + safeBottom;
+  // On iOS, the tab bar sits above the home indicator.
+  // We set a fixed content height (icon + label) and add the safe area bottom separately.
+  // This ensures the label is never clipped by the home indicator area.
+  const CONTENT_HEIGHT = 50; // icon(22) + gap(4) + label(11) + paddingTop(6) + some slack
+  const bottomInset = Platform.OS === "web" ? 0 : insets.bottom;
+  const tabBarHeight = CONTENT_HEIGHT + bottomInset;
 
   return (
     <Tabs
@@ -22,7 +26,8 @@ export default function TabLayout() {
         tabBarStyle: {
           height: tabBarHeight,
           paddingTop: 6,
-          paddingBottom: Platform.OS === "web" ? 6 : safeBottom + 6,
+          // Push content up above the home indicator
+          paddingBottom: bottomInset,
           backgroundColor: colors.background,
           borderTopColor: colors.border,
           borderTopWidth: 0.5,
@@ -32,6 +37,12 @@ export default function TabLayout() {
           fontWeight: "500",
           lineHeight: 11,
           letterSpacing: -0.3,
+          marginBottom: 0,
+        },
+        tabBarItemStyle: {
+          height: CONTENT_HEIGHT,
+          justifyContent: "center",
+          alignItems: "center",
         },
         tabBarAllowFontScaling: false,
       }}
