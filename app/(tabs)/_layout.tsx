@@ -81,6 +81,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={22} name="brain.head.profile" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="ideas"
+        options={{
+          title: "企画提案",
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="lightbulb.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

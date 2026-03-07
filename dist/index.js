@@ -861,6 +861,49 @@ async function invokeLLM(params) {
   return await response.json();
 }
 
+// server/_core/dataApi.ts
+async function callDataApi(apiId, options = {}) {
+  if (!ENV.forgeApiUrl) {
+    throw new Error("BUILT_IN_FORGE_API_URL is not configured");
+  }
+  if (!ENV.forgeApiKey) {
+    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
+  }
+  const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
+  const fullUrl = new URL("webdevtoken.v1.WebDevService/CallApi", baseUrl).toString();
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "connect-protocol-version": "1",
+      authorization: `Bearer ${ENV.forgeApiKey}`
+    },
+    body: JSON.stringify({
+      apiId,
+      query: options.query,
+      body: options.body,
+      path_params: options.pathParams,
+      multipart_form_data: options.formData
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `Data API request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
+    );
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (payload && typeof payload === "object" && "jsonData" in payload) {
+    try {
+      return JSON.parse(payload.jsonData ?? "{}");
+    } catch {
+      return payload.jsonData;
+    }
+  }
+  return payload;
+}
+
 // server/analytics-router.ts
 import { eq as eq2, desc, asc, and } from "drizzle-orm";
 import * as crypto from "crypto";
@@ -1309,6 +1352,133 @@ ${recent5.join("\n")}`;
     const rawContent = response.choices?.[0]?.message?.content;
     const answer = typeof rawContent === "string" ? rawContent : Array.isArray(rawContent) ? rawContent.map((c) => c.text ?? "").join("") : "\u56DE\u7B54\u3092\u751F\u6210\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002";
     return { answer };
+  }),
+  // ── トレンド企画提案システム ─────────────────────────────────────────────────
+  // 日本のYouTubeトレンド動画を取得
+  getTrendingVideos: publicProcedure.input(z2.object({ category: z2.string().optional() })).query(async ({ input }) => {
+    const categories = [
+      { label: "\u30D3\u30B8\u30CD\u30B9\u30FB\u304A\u91D1", query: "\u65E5\u672C \u30D3\u30B8\u30CD\u30B9 \u304A\u91D1 \u7A3C\u3050 2026" },
+      { label: "\u66B4\u9732\u30FB\u708E\u4E0A", query: "\u65E5\u672C \u66B4\u9732 \u708E\u4E0A \u771F\u76F8 2026" },
+      { label: "\u8A50\u6B3A\u30FB\u4E8B\u4EF6", query: "\u65E5\u672C \u8A50\u6B3A \u4E8B\u4EF6 \u902E\u6355 2026" },
+      { label: "\u6295\u8CC7\u30FB\u526F\u696D", query: "\u65E5\u672C \u6295\u8CC7 \u526F\u696D \u8CC7\u7523 2026" },
+      { label: "\u30A8\u30F3\u30BF\u30E1\u30FB\u8A71\u984C", query: "\u65E5\u672C \u8A71\u984C \u30D0\u30BA \u30A8\u30F3\u30BF\u30E1 2026" }
+    ];
+    const targetCategories = input.category ? categories.filter((c) => c.label === input.category) : categories;
+    const results = [];
+    for (const cat of targetCategories) {
+      try {
+        const searchResult = await callDataApi("Youtube/search", {
+          query: { q: cat.query, hl: "ja", gl: "JP" }
+        });
+        const videos2 = (searchResult?.contents || []).filter((item) => item.type === "video").slice(0, 5).map((item) => ({
+          videoId: item.video?.videoId || "",
+          title: item.video?.title || "",
+          channel: item.video?.channelTitle || "",
+          views: item.video?.viewCountText || "",
+          publishedAt: item.video?.publishedTimeText || "",
+          thumbnail: item.video?.thumbnails?.[0]?.url || "",
+          description: item.video?.descriptionSnippet || ""
+        }));
+        results.push({ category: cat.label, videos: videos2 });
+      } catch (e) {
+        results.push({ category: cat.label, videos: [] });
+      }
+    }
+    return { trends: results };
+  }),
+  // AI企画提案を生成
+  generateIdeas: publicProcedure.input(z2.object({
+    selectedTrends: z2.array(z2.object({
+      title: z2.string(),
+      category: z2.string(),
+      views: z2.string().optional()
+    })),
+    focusCategory: z2.string().optional()
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) return { ideas: [], rawText: "", error: "DB not available" };
+    const topVideos = await db.select().from(videos).orderBy(desc(videos.views)).limit(30);
+    const highCtrVideos = await db.select().from(videos).orderBy(desc(videos.ctr)).limit(20);
+    const channel = await db.select().from(channelConfig).limit(1).then((r) => r[0]);
+    const topTitles = topVideos.slice(0, 10).map(
+      (v) => `\u300C${v.title}\u300D(${(v.views || 0).toLocaleString()}\u56DE, CTR ${((v.ctr || 0) * 100).toFixed(1)}%)`
+    ).join("\n");
+    const highCtrTitles = highCtrVideos.slice(0, 10).map(
+      (v) => `\u300C${v.title}\u300D(CTR ${((v.ctr || 0) * 100).toFixed(1)}%, ${(v.views || 0).toLocaleString()}\u56DE)`
+    ).join("\n");
+    const avgCtr = topVideos.length > 0 ? topVideos.reduce((s, v) => s + (v.ctr || 0), 0) / topVideos.length : 0;
+    const trendContext = input.selectedTrends.map((t2) => `\u30FB${t2.category}: \u300C${t2.title}\u300D`).join("\n");
+    const systemPrompt = `\u3042\u306A\u305F\u306F\u300C${channel?.channelName || "\u4E09\u5D0E\u512A\u592A"}\u300D\u306EYouTube\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5C02\u5C5E\u30B3\u30F3\u30C6\u30F3\u30C4\u30B9\u30C8\u30E9\u30C6\u30B8\u30B9\u30C8\u3067\u3059\u3002
+
+\u3010\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u7279\u5FB4\u3068\u5F37\u307F\u3011
+- \u30D3\u30B8\u30CD\u30B9\u30FB\u304A\u91D1\u30FB\u6295\u8CC7\u30FB\u8A50\u6B3A\u66B4\u9732\u30FB\u793E\u4F1A\u554F\u984C\u306B\u5F37\u3044
+- \u5B9F\u696D\u5BB6\u30FB\u8D77\u696D\u5BB6\u3068\u3057\u3066\u306E\u5B9F\u4F53\u9A13\u3068\u4FE1\u983C\u6027\u304C\u3042\u308B
+- \u8996\u8074\u8005\u5C64: 20\u301C40\u4EE3\u306E\u7537\u6027\u3001\u30D3\u30B8\u30CD\u30B9\u306B\u95A2\u5FC3\u304C\u3042\u308B\u5C64
+- \u30C1\u30E3\u30F3\u30CD\u30EB\u5E73\u5747CTR: ${(avgCtr * 100).toFixed(1)}%
+
+\u3010\u904E\u53BB\u306E\u8996\u8074\u56DE\u6570TOP10\u52D5\u753B\uFF08\u52DD\u3061\u30D1\u30BF\u30FC\u30F3\uFF09\u3011
+${topTitles}
+
+\u3010\u904E\u53BB\u306E\u9AD8CTR TOP10\u52D5\u753B\uFF08\u30AF\u30EA\u30C3\u30AF\u3055\u308C\u3084\u3059\u3044\u30D1\u30BF\u30FC\u30F3\uFF09\u3011
+${highCtrTitles}
+
+\u3010\u73FE\u5728\u306EYouTube\u30C8\u30EC\u30F3\u30C9\uFF08\u65E5\u672C\uFF09\u3011
+${trendContext}
+
+\u4E0A\u8A18\u306E\u30C8\u30EC\u30F3\u30C9\u3068\u904E\u53BB\u306E\u52DD\u3061\u30D1\u30BF\u30FC\u30F3\u3092\u7D44\u307F\u5408\u308F\u305B\u3066\u3001${channel?.channelName || "\u4E09\u5D0E\u512A\u592A"}\u304C\u3084\u308B\u3068\u30D0\u30BA\u308B\u4F01\u753B\u30923\u672C\u63D0\u6848\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u5F62\u5F0F\u3067\u56DE\u7B54\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E00\u5207\u4E0D\u8981\uFF09:
+{
+  "ideas": [
+    {
+      "title": "\u4F01\u753B\u30BF\u30A4\u30C8\u30EB\uFF0830\u6587\u5B57\u4EE5\u5185\uFF09",
+      "concept": "\u4F01\u753B\u306E\u6982\u8981\uFF08100\u6587\u5B57\u4EE5\u5185\uFF09",
+      "titleOptions": ["\u30BF\u30A4\u30C8\u30EB\u68481", "\u30BF\u30A4\u30C8\u30EB\u68482", "\u30BF\u30A4\u30C8\u30EB\u68483"],
+      "thumbnailConcept": "\u30B5\u30E0\u30CD\u30A4\u30EB\u306E\u69CB\u6210\u6848\uFF08\u80CC\u666F\u8272\u30FB\u30C6\u30AD\u30B9\u30C8\u30FB\u8868\u60C5\u30FB\u69CB\u56F3\uFF09",
+      "whyBuzz": "\u306A\u305C\u30D0\u30BA\u308B\u304B\uFF08\u904E\u53BB\u30C7\u30FC\u30BF\u3068\u306E\u95A2\u9023\u6027\uFF09",
+      "buzzScore": 85,
+      "estimatedCtr": "7.5%",
+      "category": "\u30D3\u30B8\u30CD\u30B9",
+      "trendKeyword": "\u53C2\u7167\u3057\u305F\u30C8\u30EC\u30F3\u30C9\u30AD\u30FC\u30EF\u30FC\u30C9"
+    }
+  ]
+}`;
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "\u30C8\u30EC\u30F3\u30C9\u3092\u5206\u6790\u3057\u3066\u3001\u30D0\u30BA\u308B\u4F01\u753B\u30923\u672C\u63D0\u6848\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }
+      ],
+      maxTokens: 2e3
+    });
+    const rawContent = response.choices?.[0]?.message?.content;
+    const text2 = typeof rawContent === "string" ? rawContent : Array.isArray(rawContent) ? rawContent.map((c) => c.text ?? "").join("") : "";
+    try {
+      const jsonMatch = text2.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON found");
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { ideas: parsed.ideas || [], rawText: text2 };
+    } catch (e) {
+      return { ideas: [], rawText: text2, error: "JSON parse failed" };
+    }
+  }),
+  // 特定のトレンドキーワードで深掘り検索
+  searchTrendDetail: publicProcedure.input(z2.object({ keyword: z2.string() })).query(async ({ input }) => {
+    try {
+      const result = await callDataApi("Youtube/search", {
+        query: { q: input.keyword + " \u65E5\u672C", hl: "ja", gl: "JP" }
+      });
+      const items = (result?.contents || []).filter((item) => item.type === "video").slice(0, 10).map((item) => ({
+        videoId: item.video?.videoId || "",
+        title: item.video?.title || "",
+        channel: item.video?.channelTitle || "",
+        views: item.video?.viewCountText || "",
+        publishedAt: item.video?.publishedTimeText || "",
+        thumbnail: item.video?.thumbnails?.[0]?.url || ""
+      }));
+      return { videos: items };
+    } catch (e) {
+      return { videos: [] };
+    }
   })
 });
 

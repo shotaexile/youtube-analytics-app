@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
+import { callDataApi } from "./_core/dataApi";
 import {
   videos,
   monthlyStats,
@@ -571,5 +572,186 @@ ${recent5.join('\n')}`;
       const rawContent = response.choices?.[0]?.message?.content;
       const answer = typeof rawContent === 'string' ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '回答を生成できませんでした。');
       return { answer };
+    }),
+
+  // ── トレンド企画提案システム ─────────────────────────────────────────────────
+
+  // 日本のYouTubeトレンド動画を取得
+  getTrendingVideos: publicProcedure
+    .input(z.object({ category: z.string().optional() }))
+    .query(async ({ input }) => {
+      const categories = [
+        { label: 'ビジネス・お金', query: '日本 ビジネス お金 稼ぐ 2026' },
+        { label: '暴露・炎上', query: '日本 暴露 炎上 真相 2026' },
+        { label: '詐欺・事件', query: '日本 詐欺 事件 逮捕 2026' },
+        { label: '投資・副業', query: '日本 投資 副業 資産 2026' },
+        { label: 'エンタメ・話題', query: '日本 話題 バズ エンタメ 2026' },
+      ];
+
+      const targetCategories = input.category
+        ? categories.filter(c => c.label === input.category)
+        : categories;
+
+      const results: any[] = [];
+
+      for (const cat of targetCategories) {
+        try {
+          const searchResult = await callDataApi('Youtube/search', {
+            query: { q: cat.query, hl: 'ja', gl: 'JP' },
+          }) as any;
+
+          const videos = (searchResult?.contents || [])
+            .filter((item: any) => item.type === 'video')
+            .slice(0, 5)
+            .map((item: any) => ({
+              videoId: item.video?.videoId || '',
+              title: item.video?.title || '',
+              channel: item.video?.channelTitle || '',
+              views: item.video?.viewCountText || '',
+              publishedAt: item.video?.publishedTimeText || '',
+              thumbnail: item.video?.thumbnails?.[0]?.url || '',
+              description: item.video?.descriptionSnippet || '',
+            }));
+
+          results.push({ category: cat.label, videos });
+        } catch (e) {
+          results.push({ category: cat.label, videos: [] });
+        }
+      }
+
+      return { trends: results };
+    }),
+
+  // AI企画提案を生成
+  generateIdeas: publicProcedure
+    .input(z.object({
+      selectedTrends: z.array(z.object({
+        title: z.string(),
+        category: z.string(),
+        views: z.string().optional(),
+      })),
+      focusCategory: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { ideas: [], rawText: '', error: 'DB not available' };
+
+      // 過去の高パフォーマンス動画データを取得
+      const topVideos = await db
+        .select()
+        .from(videos)
+        .orderBy(desc(videos.views))
+        .limit(30);
+
+      const highCtrVideos = await db
+        .select()
+        .from(videos)
+        .orderBy(desc(videos.ctr))
+        .limit(20);
+
+      const channel = await db.select().from(channelConfig).limit(1).then((r: any[]) => r[0]);
+
+      // 勝ちパターン抽出
+      const topTitles = topVideos.slice(0, 10).map((v: any) =>
+        `「${v.title}」(${(v.views || 0).toLocaleString()}回, CTR ${((v.ctr || 0) * 100).toFixed(1)}%)`
+      ).join('\n');
+
+      const highCtrTitles = highCtrVideos.slice(0, 10).map((v: any) =>
+        `「${v.title}」(CTR ${((v.ctr || 0) * 100).toFixed(1)}%, ${(v.views || 0).toLocaleString()}回)`
+      ).join('\n');
+
+      // 平均CTR計算
+      const avgCtr = topVideos.length > 0
+        ? topVideos.reduce((s: number, v: any) => s + (v.ctr || 0), 0) / topVideos.length
+        : 0;
+
+      const trendContext = input.selectedTrends
+        .map(t => `・${t.category}: 「${t.title}」`)
+        .join('\n');
+
+      const systemPrompt = `あなたは「${channel?.channelName || '三崎優太'}」のYouTubeチャンネルの専属コンテンツストラテジストです。
+
+【チャンネルの特徴と強み】
+- ビジネス・お金・投資・詐欺暴露・社会問題に強い
+- 実業家・起業家としての実体験と信頼性がある
+- 視聴者層: 20〜40代の男性、ビジネスに関心がある層
+- チャンネル平均CTR: ${(avgCtr * 100).toFixed(1)}%
+
+【過去の視聴回数TOP10動画（勝ちパターン）】
+${topTitles}
+
+【過去の高CTR TOP10動画（クリックされやすいパターン）】
+${highCtrTitles}
+
+【現在のYouTubeトレンド（日本）】
+${trendContext}
+
+上記のトレンドと過去の勝ちパターンを組み合わせて、${channel?.channelName || '三崎優太'}がやるとバズる企画を3本提案してください。
+
+必ず以下のJSON形式で回答してください（他のテキストは一切不要）:
+{
+  "ideas": [
+    {
+      "title": "企画タイトル（30文字以内）",
+      "concept": "企画の概要（100文字以内）",
+      "titleOptions": ["タイトル案1", "タイトル案2", "タイトル案3"],
+      "thumbnailConcept": "サムネイルの構成案（背景色・テキスト・表情・構図）",
+      "whyBuzz": "なぜバズるか（過去データとの関連性）",
+      "buzzScore": 85,
+      "estimatedCtr": "7.5%",
+      "category": "ビジネス",
+      "trendKeyword": "参照したトレンドキーワード"
+    }
+  ]
+}`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'トレンドを分析して、バズる企画を3本提案してください。' },
+        ],
+        maxTokens: 2000,
+      });
+
+      const rawContent = response.choices?.[0]?.message?.content;
+      const text = typeof rawContent === 'string' ? rawContent
+        : Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '';
+
+      // JSONを抽出してパース
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('No JSON found');
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { ideas: parsed.ideas || [], rawText: text };
+      } catch (e) {
+        return { ideas: [], rawText: text, error: 'JSON parse failed' };
+      }
+    }),
+
+  // 特定のトレンドキーワードで深掘り検索
+  searchTrendDetail: publicProcedure
+    .input(z.object({ keyword: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const result = await callDataApi('Youtube/search', {
+          query: { q: input.keyword + ' 日本', hl: 'ja', gl: 'JP' },
+        }) as any;
+
+        const items = (result?.contents || [])
+          .filter((item: any) => item.type === 'video')
+          .slice(0, 10)
+          .map((item: any) => ({
+            videoId: item.video?.videoId || '',
+            title: item.video?.title || '',
+            channel: item.video?.channelTitle || '',
+            views: item.video?.viewCountText || '',
+            publishedAt: item.video?.publishedTimeText || '',
+            thumbnail: item.video?.thumbnails?.[0]?.url || '',
+          }));
+
+        return { videos: items };
+      } catch (e) {
+        return { videos: [] };
+      }
     }),
 });

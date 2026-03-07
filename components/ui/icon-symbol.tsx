@@ -45,6 +45,7 @@ const MAPPING = {
   "power": "power-settings-new",
   "calendar": "calendar-today",
   "calendar.badge.clock": "date-range",
+  "lightbulb.fill": "lightbulb",
 } as IconMapping;
 
 export function IconSymbol({
