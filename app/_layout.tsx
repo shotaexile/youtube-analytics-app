@@ -30,7 +30,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // ─── Password ────────────────────────────────────────────────────────────────
 const CORRECT_PASSWORD = "0329";
-const AUTH_STORAGE_KEY = "viewcore_auth_v1";
+const AUTH_STORAGE_KEY = "viewcore_auth_v2";
 
 function PasswordScreen({ onUnlock }: { onUnlock: () => void }) {
   const [input, setInput] = useState("");
