@@ -98,19 +98,21 @@ export default function ImportScreen() {
 
   const doImport = async () => {
     try {
-      setIsLoading(true);
       setStatus('idle');
       setMessage('');
 
+      // Open file picker BEFORE showing loading state
       const result = await DocumentPicker.getDocumentAsync({
         type: ['text/csv', 'text/comma-separated-values', 'application/csv', '*/*'],
         copyToCacheDirectory: true,
       });
 
       if (result.canceled || !result.assets || result.assets.length === 0) {
-        setIsLoading(false);
         return;
       }
+
+      // Only show loading after user has selected a file
+      setIsLoading(true);
 
       const asset = result.assets[0];
       let csvContent: string;
