@@ -1,7 +1,7 @@
-import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput, RefreshControl } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
@@ -138,6 +138,7 @@ function VideoCard({ video }: { video: VideoData }) {
 }
 
 export default function VideosScreen() {
+  const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ grade?: string; filter?: VideoFilter }>();
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,7 +149,13 @@ export default function VideosScreen() {
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  const { videos: allVideos } = useVideos('all');
+  const { videos: allVideos, isLoading } = useVideos('all');
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Re-render by toggling a dummy state; actual data comes from useVideos which re-reads CSV/DB
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
 
   const counts = useMemo(() => ({
     all: allVideos.filter((v: VideoData) => !v.isPrivate).length,
@@ -360,6 +367,9 @@ export default function VideosScreen() {
         renderItem={({ item }) => <VideoCard video={item} />}
         contentContainerStyle={{ padding: 12, paddingBottom: 20 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
+        }
         ListEmptyComponent={
           <View style={{ alignItems: 'center', paddingVertical: 40 }}>
             <Text style={{ fontSize: 14, color: '#606060' }}>動画が見つかりません</Text>

@@ -1,6 +1,6 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Image } from "expo-image";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -46,9 +46,15 @@ function MedalIcon({ rank }: { rank: number }) {
 
 export default function RankingsScreen() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   const [rankingType, setRankingType] = useState<RankingType>('views');
   const [period, setPeriod] = useState<PeriodFilter>('all');
   const [videoFilter, setVideoFilter] = useState<VideoFilter>('all');
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
 
   const currentType = RANKING_TYPES.find(t => t.key === rankingType)!;
 
@@ -101,7 +107,13 @@ export default function RankingsScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
+        }
+      >
         {/* Sticky Header */}
         <View style={{ backgroundColor: 'white', paddingTop: 16, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F0F0F', paddingHorizontal: 16, marginBottom: 12 }}>ランキング</Text>

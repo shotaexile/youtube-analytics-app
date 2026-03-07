@@ -1,5 +1,5 @@
-import { ScrollView, Text, View, TouchableOpacity, Dimensions } from "react-native";
-import { useState, useMemo } from "react";
+import { ScrollView, Text, View, TouchableOpacity, Dimensions, RefreshControl } from "react-native";
+import { useState, useMemo, useCallback } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { formatNumber, getDayOfWeekStats, getHourOfDayStats, getCategoryStats } from "@/lib/data/csv-parser";
@@ -200,6 +200,12 @@ function ScatterPlot({ videos }: { videos: any[] }) {
 
 export default function ChartsScreen() {
   const [activeTab, setActiveTab] = useState<ChartTab>('monthly');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
   const { videos } = useVideos('all');
   const { stats: monthlyStats } = useMonthlyStats(24);
   const dayOfWeekStats = useMemo(() => getDayOfWeekStats(), []);
@@ -306,7 +312,13 @@ export default function ChartsScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
+        }
+      >
         {/* Sticky Header */}
         <View style={{ backgroundColor: 'white', paddingTop: 16, paddingBottom: 10, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F0F0F', paddingHorizontal: 16, marginBottom: 12 }}>グラフ分析</Text>

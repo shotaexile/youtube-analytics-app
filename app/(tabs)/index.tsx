@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Image } from "expo-image";
@@ -62,6 +62,7 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   const [videoFilter, setVideoFilter] = useState<VideoFilter>('all');
   const [channelConfig, setChannelConfig] = useState<ChannelConfig | null>(null);
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -240,9 +241,26 @@ export default function DashboardScreen() {
     }
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await utils.analytics.invalidate();
+    } catch (e) {
+      // ignore
+    } finally {
+      setRefreshing(false);
+    }
+  }, [utils]);
+
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 30 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
+        }
+      >
         {/* Header with Channel Info */}
         <View style={{ backgroundColor: 'white', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

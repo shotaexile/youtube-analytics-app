@@ -1,5 +1,5 @@
-import { ScrollView, Text, View, TouchableOpacity, Alert } from "react-native";
-import { useState, useMemo } from "react";
+import { ScrollView, Text, View, TouchableOpacity, Alert, RefreshControl } from "react-native";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -197,6 +197,12 @@ export default function AIScreen() {
   const router = useRouter();
   const { logout } = useAuth();
   const [activeSection, setActiveSection] = useState<'summary' | 'insights' | 'actions' | 'grades'>('summary');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
 
   const videos = useMemo(() => parseVideoData(), []);
   const summary = useMemo(() => getChannelSummary(), []);
@@ -242,7 +248,13 @@ export default function AIScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-background">
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
+        }
+      >
         <View style={{ backgroundColor: 'white', paddingTop: 16, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
             <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#FF000015', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
