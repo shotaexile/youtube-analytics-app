@@ -12,6 +12,10 @@
       "dest": "/assets/$1"
     },
     {
+      "src": "/fonts/(.*)",
+      "dest": "/fonts/$1"
+    },
+    {
       "src": "/favicon.ico",
       "dest": "/favicon.ico"
     },
