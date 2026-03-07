@@ -1,13 +1,16 @@
-import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, FlatList, TextInput, Alert } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useMemo } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
 import { useVideos } from "@/lib/data/use-analytics";
 import { VideoData, VideoFilter } from "@/lib/data/types";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+
+const AUTH_STORAGE_KEY = 'auth_v2';
 
 type SortType = 'date' | 'views' | 'revenue' | 'ctr' | 'likeRate' | 'subscribers';
 
@@ -111,6 +114,24 @@ export default function VideosScreen() {
 
   const { videos: allVideos } = useVideos('all');
 
+  const handleLogout = () => {
+    Alert.alert(
+      'ログアウト',
+      '本当にログアウトしますか？',
+      [
+        { text: 'キャンセル', onPress: () => {}, style: 'cancel' },
+        {
+          text: 'ログアウト',
+          onPress: async () => {
+            await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+            router.replace('/' as any);
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };
+
   const counts = useMemo(() => ({
     all: allVideos.filter((v: VideoData) => !v.isPrivate).length,
     regular: allVideos.filter((v: VideoData) => !v.isShort && !v.isPrivate).length,
@@ -169,9 +190,15 @@ export default function VideosScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSearch(!showSearch)}
-            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: showSearch ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: showSearch ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 6 }}
           >
             <IconSymbol name="magnifyingglass" size={16} color={showSearch ? 'white' : '#606060'} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleLogout}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <IconSymbol name="power" size={16} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
 
