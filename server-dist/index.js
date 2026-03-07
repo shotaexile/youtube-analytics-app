@@ -707,6 +707,161 @@ import { z as z3 } from "zod";
 
 // server/analytics-router.ts
 import { z as z2 } from "zod";
+
+// server/_core/llm.ts
+var ensureArray = (value) => Array.isArray(value) ? value : [value];
+var normalizeContentPart = (part) => {
+  if (typeof part === "string") {
+    return { type: "text", text: part };
+  }
+  if (part.type === "text") {
+    return part;
+  }
+  if (part.type === "image_url") {
+    return part;
+  }
+  if (part.type === "file_url") {
+    return part;
+  }
+  throw new Error("Unsupported message content part");
+};
+var normalizeMessage = (message) => {
+  const { role, name, tool_call_id } = message;
+  if (role === "tool" || role === "function") {
+    const content = ensureArray(message.content).map((part) => typeof part === "string" ? part : JSON.stringify(part)).join("\n");
+    return {
+      role,
+      name,
+      tool_call_id,
+      content
+    };
+  }
+  const contentParts = ensureArray(message.content).map(normalizeContentPart);
+  if (contentParts.length === 1 && contentParts[0].type === "text") {
+    return {
+      role,
+      name,
+      content: contentParts[0].text
+    };
+  }
+  return {
+    role,
+    name,
+    content: contentParts
+  };
+};
+var normalizeToolChoice = (toolChoice, tools) => {
+  if (!toolChoice) return void 0;
+  if (toolChoice === "none" || toolChoice === "auto") {
+    return toolChoice;
+  }
+  if (toolChoice === "required") {
+    if (!tools || tools.length === 0) {
+      throw new Error("tool_choice 'required' was provided but no tools were configured");
+    }
+    if (tools.length > 1) {
+      throw new Error(
+        "tool_choice 'required' needs a single tool or specify the tool name explicitly"
+      );
+    }
+    return {
+      type: "function",
+      function: { name: tools[0].function.name }
+    };
+  }
+  if ("name" in toolChoice) {
+    return {
+      type: "function",
+      function: { name: toolChoice.name }
+    };
+  }
+  return toolChoice;
+};
+var resolveApiUrl = () => ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0 ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions` : "https://forge.manus.im/v1/chat/completions";
+var assertApiKey = () => {
+  if (!ENV.forgeApiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+};
+var normalizeResponseFormat = ({
+  responseFormat,
+  response_format,
+  outputSchema,
+  output_schema
+}) => {
+  const explicitFormat = responseFormat || response_format;
+  if (explicitFormat) {
+    if (explicitFormat.type === "json_schema" && !explicitFormat.json_schema?.schema) {
+      throw new Error("responseFormat json_schema requires a defined schema object");
+    }
+    return explicitFormat;
+  }
+  const schema = outputSchema || output_schema;
+  if (!schema) return void 0;
+  if (!schema.name || !schema.schema) {
+    throw new Error("outputSchema requires both name and schema");
+  }
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: schema.name,
+      schema: schema.schema,
+      ...typeof schema.strict === "boolean" ? { strict: schema.strict } : {}
+    }
+  };
+};
+async function invokeLLM(params) {
+  assertApiKey();
+  const {
+    messages,
+    tools,
+    toolChoice,
+    tool_choice,
+    outputSchema,
+    output_schema,
+    responseFormat,
+    response_format
+  } = params;
+  const payload = {
+    model: "gemini-2.5-flash",
+    messages: messages.map(normalizeMessage)
+  };
+  if (tools && tools.length > 0) {
+    payload.tools = tools;
+  }
+  const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
+  if (normalizedToolChoice) {
+    payload.tool_choice = normalizedToolChoice;
+  }
+  payload.max_tokens = 32768;
+  payload.thinking = {
+    budget_tokens: 128
+  };
+  const normalizedResponseFormat = normalizeResponseFormat({
+    responseFormat,
+    response_format,
+    outputSchema,
+    output_schema
+  });
+  if (normalizedResponseFormat) {
+    payload.response_format = normalizedResponseFormat;
+  }
+  const response = await fetch(resolveApiUrl(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${ENV.forgeApiKey}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`LLM invoke failed: ${response.status} ${response.statusText} \u2013 ${errorText}`);
+  }
+  return await response.json();
+}
+
+// server/analytics-router.ts
 import { eq as eq2, desc, asc, and } from "drizzle-orm";
 import * as crypto from "crypto";
 async function sendExpoPushNotifications(tokens, title, body) {
@@ -1096,6 +1251,64 @@ var analyticsRouter = router({
     if (!db) return null;
     const rows = await db.select().from(csvUploads).orderBy(desc(csvUploads.createdAt)).limit(1);
     return rows[0] || null;
+  }),
+  // ── AI Bot ────────────────────────────────────────────────────────────────
+  // Answer questions about the channel analytics using LLM
+  askBot: publicProcedure.input(z2.object({ question: z2.string().max(500) })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const allVideos = await db.select().from(videos).orderBy(desc(videos.publishedDate));
+    if (allVideos.length === 0) throw new Error("\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002CSV\u3092\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+    const allMonthly = await db.select().from(monthlyStats).orderBy(asc(monthlyStats.month));
+    const channelRows = await db.select().from(channelConfig).limit(1);
+    const channel = channelRows[0];
+    const totalVideos = allVideos.length;
+    const publicVideos = allVideos.filter((v) => !v.isPrivate);
+    const shortVideos = publicVideos.filter((v) => v.isShort);
+    const regularVideos = publicVideos.filter((v) => !v.isShort);
+    const totalViews = publicVideos.reduce((s, v) => s + v.views, 0);
+    const totalRevenue = publicVideos.reduce((s, v) => s + v.estimatedRevenue, 0);
+    const totalSubscriberChange = publicVideos.reduce((s, v) => s + v.subscriberChange, 0);
+    const avgCtr = publicVideos.length > 0 ? publicVideos.reduce((s, v) => s + v.ctr, 0) / publicVideos.length : 0;
+    const avgViewRate = publicVideos.length > 0 ? publicVideos.reduce((s, v) => s + v.avgViewRate, 0) / publicVideos.length : 0;
+    const top10 = [...publicVideos].sort((a, b) => b.views - a.views).slice(0, 10).map((v) => `  - \u300C${v.title}\u300D \u518D\u751F:${v.views.toLocaleString()} CTR:${(v.ctr * 100).toFixed(1)}% \u8996\u8074\u7DAD\u6301\u7387:${(v.avgViewRate * 100).toFixed(1)}% \u767B\u9332\u8005\u5897\u6E1B:${v.subscriberChange > 0 ? "+" : ""}${v.subscriberChange} ${v.isShort ? "[\u30B7\u30E7\u30FC\u30C8]" : "[\u901A\u5E38]"} \u6295\u7A3F:${v.publishedAt}`);
+    const monthlySummary = allMonthly.map(
+      (m) => `  ${m.month}: \u518D\u751F${m.views.toLocaleString()} \u53CE\u76CA\xA5${Math.round(m.revenue).toLocaleString()} \u6295\u7A3F${m.videoCount}\u672C \u767B\u9332\u8005${m.subscriberChange > 0 ? "+" : ""}${m.subscriberChange}`
+    );
+    const recent5 = allVideos.slice(0, 5).map(
+      (v) => `  - \u300C${v.title}\u300D \u518D\u751F:${v.views.toLocaleString()} \u6295\u7A3F:${v.publishedAt} ${v.isShort ? "[\u30B7\u30E7\u30FC\u30C8]" : "[\u901A\u5E38]"}`
+    );
+    const systemPrompt = `\u3042\u306A\u305F\u306F\u300C${channel?.channelName || "ViewCore"}\u300D\u3068\u3044\u3046YouTube\u30C1\u30E3\u30F3\u30CD\u30EB\u306E\u5C02\u5C5E\u30A2\u30CA\u30EA\u30B9\u30C8\u3067\u3059\u3002
+\u4EE5\u4E0B\u306E\u30C1\u30E3\u30F3\u30CD\u30EB\u30C7\u30FC\u30BF\u3092\u5143\u306B\u3001\u30C1\u30FC\u30E0\u30E1\u30F3\u30D0\u30FC\u306E\u8CEA\u554F\u306B\u65E5\u672C\u8A9E\u3067\u5177\u4F53\u7684\u30FB\u7C21\u6F54\u306B\u56DE\u7B54\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+\u6570\u5024\u306F\u5FC5\u305A\u5B9F\u969B\u306E\u30C7\u30FC\u30BF\u3092\u4F7F\u7528\u3057\u3001\u63A8\u6E2C\u3084\u4E00\u822C\u8AD6\u306F\u907F\u3051\u3066\u304F\u3060\u3055\u3044\u3002
+\u56DE\u7B54\u306F3\u301C5\u6587\u7A0B\u5EA6\u3067\u307E\u3068\u3081\u3001\u91CD\u8981\u306A\u6570\u5024\u3092\u592A\u5B57\uFF08**\u6570\u5024**\uFF09\u3067\u5F37\u8ABF\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u3010\u30C1\u30E3\u30F3\u30CD\u30EB\u6982\u8981\u3011
+- \u30C1\u30E3\u30F3\u30CD\u30EB\u540D: ${channel?.channelName || "\u4E0D\u660E"}
+- \u7DCF\u52D5\u753B\u6570: ${totalVideos}\u672C\uFF08\u516C\u958B: ${publicVideos.length}\u672C\u3001\u30B7\u30E7\u30FC\u30C8: ${shortVideos.length}\u672C\u3001\u901A\u5E38: ${regularVideos.length}\u672C\uFF09
+- \u7DCF\u518D\u751F\u6570: ${totalViews.toLocaleString()}
+- \u7DCF\u53CE\u76CA: \xA5${Math.round(totalRevenue).toLocaleString()}
+- \u7DCF\u767B\u9332\u8005\u5897\u6E1B: ${totalSubscriberChange > 0 ? "+" : ""}${totalSubscriberChange.toLocaleString()}
+- \u5E73\u5747CTR: ${(avgCtr * 100).toFixed(2)}%
+- \u5E73\u5747\u8996\u8074\u7DAD\u6301\u7387: ${(avgViewRate * 100).toFixed(1)}%
+
+\u3010\u6708\u5225\u30C7\u30FC\u30BF\u3011
+${monthlySummary.join("\n")}
+
+\u3010\u518D\u751F\u6570\u30C8\u30C3\u30D710\u52D5\u753B\u3011
+${top10.join("\n")}
+
+\u3010\u6700\u65B05\u672C\u306E\u52D5\u753B\u3011
+${recent5.join("\n")}`;
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: input.question }
+      ]
+    });
+    const rawContent = response.choices?.[0]?.message?.content;
+    const answer = typeof rawContent === "string" ? rawContent : Array.isArray(rawContent) ? rawContent.map((c) => c.text ?? "").join("") : "\u56DE\u7B54\u3092\u751F\u6210\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002";
+    return { answer };
   })
 });
 
