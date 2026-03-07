@@ -168,6 +168,41 @@ function buildMonthlyStats(videoRows: InsertVideo[]): InsertMonthlyStats[] {
   return Array.from(map.entries()).map(([month, stats]) => ({ month, ...stats }));
 }
 
+// ── thumbnail privacy check ─────────────────────────────────────────────────
+
+/**
+ * Check if a YouTube video is private/deleted by fetching its thumbnail.
+ * Returns true if the video is private (thumbnail returns 404).
+ */
+async function checkIsPrivate(videoId: string): Promise<boolean> {
+  try {
+    const url = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+    const res = await fetch(url, { method: "HEAD" });
+    return res.status === 404;
+  } catch {
+    // Network error — assume public to avoid false positives
+    return false;
+  }
+}
+
+/**
+ * Check all videos in parallel (batched to avoid overwhelming the network).
+ * Returns a Set of videoIds that are private.
+ */
+async function checkPrivacyInBatches(videoIds: string[], batchSize = 20): Promise<Set<string>> {
+  const privateIds = new Set<string>();
+  for (let i = 0; i < videoIds.length; i += batchSize) {
+    const batch = videoIds.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(async (id) => ({ id, isPrivate: await checkIsPrivate(id) }))
+    );
+    for (const { id, isPrivate } of results) {
+      if (isPrivate) privateIds.add(id);
+    }
+  }
+  return privateIds;
+}
+
 // ── router ────────────────────────────────────────────────────────────────────
 
 export const analyticsRouter = router({
@@ -180,6 +215,16 @@ export const analyticsRouter = router({
 
       const videoRows = parseCSVToVideos(input.csvContent);
       if (videoRows.length === 0) throw new Error("No valid video data found in CSV");
+
+      // Check thumbnail availability to accurately detect private/deleted videos
+      const allVideoIds = videoRows.map((v) => v.videoId as string);
+      const privateIds = await checkPrivacyInBatches(allVideoIds, 20);
+      // Apply accurate privacy flag (override CSV-based heuristic)
+      for (const v of videoRows) {
+        v.isPrivate = privateIds.has(v.videoId as string);
+        // Shorts cannot be private (private videos have no duration info)
+        if (v.isPrivate) v.isShort = false;
+      }
 
       // Upsert videos one by one (MySQL onDuplicateKeyUpdate)
       for (const v of videoRows) {

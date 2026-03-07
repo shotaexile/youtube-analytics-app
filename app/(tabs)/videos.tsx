@@ -24,6 +24,7 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
   { key: 'all', label: 'すべて', color: '#606060' },
   { key: 'regular', label: '一般動画', color: '#FF0000' },
   { key: 'short', label: 'ショート', color: '#3B82F6' },
+  { key: 'private', label: '非公開', color: '#9CA3AF' },
 ];
 
 const GRADE_COLORS: Record<string, string> = {
@@ -111,20 +112,20 @@ export default function VideosScreen() {
   const { videos: allVideos } = useVideos('all');
 
   const counts = useMemo(() => ({
-    // 'all' shows only public videos (regular + short), excluding private
     all: allVideos.filter((v: VideoData) => !v.isPrivate).length,
     regular: allVideos.filter((v: VideoData) => !v.isShort && !v.isPrivate).length,
-    short: allVideos.filter((v: VideoData) => v.isShort).length,
+    short: allVideos.filter((v: VideoData) => v.isShort && !v.isPrivate).length,
+    private: allVideos.filter((v: VideoData) => v.isPrivate).length,
   }), [allVideos]);
 
   const filteredVideos = useMemo(() => {
     let videos = allVideos;
 
     // Video type filter
-    // 'all' excludes private videos — they belong in the dedicated private videos page
     if (videoFilter === 'all') videos = videos.filter(v => !v.isPrivate);
     else if (videoFilter === 'regular') videos = videos.filter(v => !v.isShort && !v.isPrivate);
-    else if (videoFilter === 'short') videos = videos.filter(v => v.isShort);
+    else if (videoFilter === 'short') videos = videos.filter(v => v.isShort && !v.isPrivate);
+    else if (videoFilter === 'private') videos = videos.filter(v => v.isPrivate);
 
     // Grade filter
     if (gradeFilter) {
