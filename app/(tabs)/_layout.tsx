@@ -9,11 +9,10 @@ export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  // On iOS, the tab bar sits above the home indicator.
-  // We set a fixed content height (icon + label) and add the safe area bottom separately.
-  // This ensures the label is never clipped by the home indicator area.
-  const CONTENT_HEIGHT = 50; // icon(22) + gap(4) + label(11) + paddingTop(6) + some slack
-  const bottomInset = Platform.OS === "web" ? 0 : insets.bottom;
+  // CONTENT_HEIGHT = the visible area for icon + label (above the home indicator)
+  // Increase this so the icon+label sit comfortably above the bottom bezel.
+  const CONTENT_HEIGHT = Platform.OS === "web" ? 52 : 62;
+  const bottomInset = Platform.OS === "web" ? 0 : Math.max(insets.bottom, 20);
   const tabBarHeight = CONTENT_HEIGHT + bottomInset;
 
   return (
@@ -25,8 +24,7 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarStyle: {
           height: tabBarHeight,
-          paddingTop: 6,
-          // Push content up above the home indicator
+          paddingTop: 8,
           paddingBottom: bottomInset,
           backgroundColor: colors.background,
           borderTopColor: colors.border,
@@ -43,6 +41,7 @@ export default function TabLayout() {
           height: CONTENT_HEIGHT,
           justifyContent: "center",
           alignItems: "center",
+          paddingBottom: 2,
         },
         tabBarAllowFontScaling: false,
       }}
