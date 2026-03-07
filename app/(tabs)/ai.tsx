@@ -1,14 +1,12 @@
 import { ScrollView, Text, View, TouchableOpacity, Alert } from "react-native";
 import { useState, useMemo } from "react";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { parseVideoData, getChannelSummary, formatNumber, formatRevenue, calculatePerformanceScore } from "@/lib/data/csv-parser";
 import { generateChannelInsights } from "@/lib/data/ai-analysis";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-
-const AUTH_STORAGE_KEY = "viewcore_auth_v2";
+import { useAuth } from "@/lib/auth-context";
 
 const GRADE_COLORS: Record<string, string> = {
   S: '#FF0000',
@@ -197,6 +195,7 @@ function ChannelSummaryCard({ videos, summary }: { videos: any[]; summary: any }
 
 export default function AIScreen() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [activeSection, setActiveSection] = useState<'summary' | 'insights' | 'actions' | 'grades'>('summary');
 
   const videos = useMemo(() => parseVideoData(), []);
@@ -226,8 +225,7 @@ export default function AIScreen() {
         {
           text: 'ログアウト',
           onPress: async () => {
-            await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-            router.replace('/' as any);
+            await logout();
           },
           style: 'destructive',
         },

@@ -22,6 +22,7 @@ import { loadCustomCSV } from "@/lib/data/csv-store";
 import { setCustomCSVContent } from "@/lib/data/csv-parser";
 import { usePushNotificationSetup } from "@/lib/data/use-push-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -333,15 +334,21 @@ function PushNotificationSetup() {
 }
 
 export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootLayoutInner />
+    </AuthProvider>
+  );
+}
+
+function RootLayoutInner() {
+  const { isAuthenticated, login } = useAuth();
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
   const [showSplash, setShowSplash] = useState(Platform.OS !== "web");
-
-  // Auth state: null = loading, false = locked, true = unlocked
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -351,10 +358,6 @@ export default function RootLayout() {
       if (csv) {
         setCustomCSVContent(csv);
       }
-    });
-    // Check if already authenticated
-    AsyncStorage.getItem(AUTH_STORAGE_KEY).then((val) => {
-      setIsAuthenticated(val === "true");
     });
   }, []);
 
@@ -406,7 +409,7 @@ export default function RootLayout() {
   if (!isAuthenticated) {
     return (
       <ThemeProvider>
-        <PasswordScreen onUnlock={() => setIsAuthenticated(true)} />
+        <PasswordScreen onUnlock={() => login()} />
       </ThemeProvider>
     );
   }
