@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import { ScreenContainer } from "@/components/screen-container";
 import { formatNumber, formatRevenue, formatDuration, calculatePerformanceScore } from "@/lib/data/csv-parser";
 import { useVideos } from "@/lib/data/use-analytics";
-import { analyzeVideo } from "@/lib/data/ai-analysis";
+import { analyzeVideo, type DetailedInsight } from "@/lib/data/ai-analysis";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
 const GRADE_COLORS: Record<string, string> = {
@@ -15,6 +15,13 @@ const GRADE_COLORS: Record<string, string> = {
   B: '#22C55E',
   C: '#3B82F6',
   D: '#9CA3AF',
+};
+
+const RATING_LABELS: Record<string, string> = {
+  excellent: '優秀',
+  good: '良好',
+  average: '普通',
+  poor: '要改善',
 };
 
 function MetricCard({ label, value, icon, color, sub }: { label: string; value: string; icon: any; color: string; sub?: string }) {
@@ -26,6 +33,37 @@ function MetricCard({ label, value, icon, color, sub }: { label: string; value: 
       </View>
       <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F' }}>{value}</Text>
       {sub && <Text style={{ fontSize: 10, color: '#606060', marginTop: 2 }}>{sub}</Text>}
+    </View>
+  );
+}
+
+function InsightCard({ insight }: { insight: DetailedInsight }) {
+  const ratingBg = insight.rating === 'excellent' ? '#F0FDF4' : insight.rating === 'good' ? '#EFF6FF' : insight.rating === 'average' ? '#FFFBEB' : '#FEF2F2';
+  const ratingBorder = insight.rating === 'excellent' ? '#BBF7D0' : insight.rating === 'good' ? '#BFDBFE' : insight.rating === 'average' ? '#FDE68A' : '#FECACA';
+
+  return (
+    <View style={{ backgroundColor: ratingBg, borderWidth: 1, borderColor: ratingBorder, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: insight.color + '20', alignItems: 'center', justifyContent: 'center' }}>
+            <IconSymbol name={insight.icon as any} size={14} color={insight.color} />
+          </View>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F' }}>{insight.category}</Text>
+        </View>
+        <View style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: insight.color + '20', borderRadius: 20 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: insight.color }}>{RATING_LABELS[insight.rating]}</Text>
+        </View>
+      </View>
+      {/* Headline */}
+      <Text style={{ fontSize: 14, fontWeight: '800', color: insight.color, marginBottom: 8 }}>{insight.headline}</Text>
+      {/* Detail */}
+      <Text style={{ fontSize: 12, color: '#374151', lineHeight: 19, marginBottom: 8 }}>{insight.detail}</Text>
+      {/* Action Tip */}
+      <View style={{ flexDirection: 'row', gap: 6, backgroundColor: 'white', borderRadius: 10, padding: 10, alignItems: 'flex-start' }}>
+        <Text style={{ fontSize: 12, color: insight.color }}>💡</Text>
+        <Text style={{ fontSize: 12, color: '#374151', flex: 1, lineHeight: 18 }}>{insight.actionTip}</Text>
+      </View>
     </View>
   );
 }
@@ -48,8 +86,6 @@ export default function VideoDetailScreen() {
       </ScreenContainer>
     );
   }
-
-  const retentionRate = video.avgViewRate > 0 ? Math.round(video.avgViewRate) : 0;
 
   return (
     <ScreenContainer containerClassName="bg-background" edges={["top", "left", "right"]}>
@@ -87,6 +123,8 @@ export default function VideoDetailScreen() {
             <Text style={{ fontSize: 13, fontWeight: '700', color: 'white' }}>Studio分析</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Title & Score */}
         <View style={{ backgroundColor: 'white', padding: 16, marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <View style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#FF000015', borderRadius: 6 }}>
@@ -106,6 +144,7 @@ export default function VideoDetailScreen() {
           </View>
         </View>
 
+        {/* Metrics */}
         <View style={{ backgroundColor: 'white', padding: 12, marginBottom: 8 }}>
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 8, paddingHorizontal: 4 }}>主要指標</Text>
           <View style={{ flexDirection: 'row' }}>
@@ -126,16 +165,29 @@ export default function VideoDetailScreen() {
           </View>
         </View>
 
+        {/* AI Analysis */}
         <View style={{ backgroundColor: 'white', padding: 16, marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: '#FF000015', alignItems: 'center', justifyContent: 'center' }}>
               <IconSymbol name="brain.head.profile" size={16} color="#FF0000" />
             </View>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F' }}>AI分析</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F' }}>AI総合評価</Text>
           </View>
-          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-            <Text style={{ fontSize: 13, color: '#0F0F0F', lineHeight: 20 }}>{analysis.summary}</Text>
+          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+            <Text style={{ fontSize: 13, color: '#0F0F0F', lineHeight: 21 }}>{analysis.summary}</Text>
           </View>
+
+          {/* Detailed Insights */}
+          {analysis.detailedInsights.length > 0 && (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F', marginBottom: 10 }}>指標別詳細分析</Text>
+              {analysis.detailedInsights.map((insight, i) => (
+                <InsightCard key={i} insight={insight} />
+              ))}
+            </View>
+          )}
+
+          {/* Strengths */}
           {analysis.strengths.length > 0 && (
             <View style={{ marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -150,11 +202,13 @@ export default function VideoDetailScreen() {
               ))}
             </View>
           )}
+
+          {/* Weaknesses */}
           {analysis.weaknesses.length > 0 && (
             <View style={{ marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 <IconSymbol name="exclamationmark.circle.fill" size={14} color="#F59E0B" />
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#F59E0B' }}>改善点</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#F59E0B' }}>課題</Text>
               </View>
               {analysis.weaknesses.map((w, i) => (
                 <View key={i} style={{ flexDirection: 'row', gap: 8, marginBottom: 6, paddingLeft: 4 }}>
@@ -164,6 +218,8 @@ export default function VideoDetailScreen() {
               ))}
             </View>
           )}
+
+          {/* Improvements */}
           <View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <IconSymbol name="arrow.up.right" size={14} color="#FF0000" />

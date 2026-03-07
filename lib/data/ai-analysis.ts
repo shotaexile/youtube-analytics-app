@@ -1,5 +1,5 @@
 import { VideoData } from './types';
-import { parseVideoData, calculatePerformanceScore, formatNumber, formatRevenue } from './csv-parser';
+import { parseVideoData, calculatePerformanceScore, formatNumber, formatRevenue, formatDuration } from './csv-parser';
 
 export interface VideoAnalysis {
   videoId: string;
@@ -10,6 +10,17 @@ export interface VideoAnalysis {
   improvements: string[];
   contentType: string;
   summary: string;
+  detailedInsights: DetailedInsight[];
+}
+
+export interface DetailedInsight {
+  category: string;
+  icon: string;
+  color: string;
+  rating: 'excellent' | 'good' | 'average' | 'poor';
+  headline: string;
+  detail: string;
+  actionTip: string;
 }
 
 export interface ChannelAnalysis {
@@ -34,12 +45,62 @@ function detectContentType(title: string): string {
   return '一般動画';
 }
 
+function getViewsRating(ratio: number): 'excellent' | 'good' | 'average' | 'poor' {
+  if (ratio >= 3) return 'excellent';
+  if (ratio >= 1.5) return 'good';
+  if (ratio >= 0.5) return 'average';
+  return 'poor';
+}
+
+function getCtrRating(ctr: number, avgCtr: number): 'excellent' | 'good' | 'average' | 'poor' {
+  const ratio = ctr / avgCtr;
+  if (ratio >= 1.5) return 'excellent';
+  if (ratio >= 1.0) return 'good';
+  if (ratio >= 0.6) return 'average';
+  return 'poor';
+}
+
+function getRetentionRating(rate: number): 'excellent' | 'good' | 'average' | 'poor' {
+  if (rate >= 50) return 'excellent';
+  if (rate >= 35) return 'good';
+  if (rate >= 20) return 'average';
+  return 'poor';
+}
+
+function getLikeRating(likeRate: number): 'excellent' | 'good' | 'average' | 'poor' {
+  if (likeRate >= 97) return 'excellent';
+  if (likeRate >= 90) return 'good';
+  if (likeRate >= 80) return 'average';
+  return 'poor';
+}
+
+function getRatingColor(rating: 'excellent' | 'good' | 'average' | 'poor'): string {
+  switch (rating) {
+    case 'excellent': return '#22C55E';
+    case 'good': return '#3B82F6';
+    case 'average': return '#F59E0B';
+    case 'poor': return '#EF4444';
+  }
+}
+
+function getRatingLabel(rating: 'excellent' | 'good' | 'average' | 'poor'): string {
+  switch (rating) {
+    case 'excellent': return '優秀';
+    case 'good': return '良好';
+    case 'average': return '普通';
+    case 'poor': return '要改善';
+  }
+}
+
 export function analyzeVideo(video: VideoData): VideoAnalysis {
   const allVideos = parseVideoData();
   const avgViews = allVideos.reduce((s, v) => s + v.views, 0) / allVideos.length;
   const avgRevenue = allVideos.filter(v => v.estimatedRevenue > 0).reduce((s, v) => s + v.estimatedRevenue, 0) / allVideos.length;
   const avgCtr = allVideos.reduce((s, v) => s + v.ctr, 0) / allVideos.length;
   const avgLikeRate = allVideos.reduce((s, v) => s + v.likeRate, 0) / allVideos.length;
+  const avgViewRate = allVideos.filter(v => v.avgViewRate > 0).reduce((s, v) => s + v.avgViewRate, 0) / allVideos.filter(v => v.avgViewRate > 0).length;
+  const avgDuration = allVideos.filter(v => v.duration > 0).reduce((s, v) => s + v.duration, 0) / allVideos.filter(v => v.duration > 0).length;
+  const avgImpressions = allVideos.filter(v => v.impressions > 0).reduce((s, v) => s + v.impressions, 0) / allVideos.filter(v => v.impressions > 0).length;
   
   const { score, grade } = calculatePerformanceScore(video);
   const contentType = detectContentType(video.title);
@@ -47,79 +108,235 @@ export function analyzeVideo(video: VideoData): VideoAnalysis {
   const strengths: string[] = [];
   const weaknesses: string[] = [];
   const improvements: string[] = [];
+  const detailedInsights: DetailedInsight[] = [];
   
-  // 視聴回数分析
-  if (video.views > avgViews * 3) {
-    strengths.push(`視聴回数が平均の${(video.views / avgViews).toFixed(1)}倍と非常に高い（${formatNumber(video.views)}回）`);
-  } else if (video.views > avgViews * 1.5) {
-    strengths.push(`視聴回数が平均より高い（${formatNumber(video.views)}回）`);
-  } else if (video.views < avgViews * 0.3) {
+  // ① 視聴回数分析
+  const viewsRatio = video.views / avgViews;
+  const viewsRating = getViewsRating(viewsRatio);
+  if (viewsRating === 'excellent') {
+    strengths.push(`視聴回数がチャンネル平均の${viewsRatio.toFixed(1)}倍（${formatNumber(video.views)}回）。このコンテンツは視聴者の強い関心を引いています`);
+  } else if (viewsRating === 'good') {
+    strengths.push(`視聴回数が平均を${((viewsRatio - 1) * 100).toFixed(0)}%上回る（${formatNumber(video.views)}回）`);
+  } else if (viewsRating === 'poor') {
     weaknesses.push(`視聴回数が平均を大きく下回る（${formatNumber(video.views)}回 / 平均${formatNumber(Math.round(avgViews))}回）`);
-    improvements.push('サムネイルとタイトルの改善でクリック率向上を図る');
   }
-  
-  // CTR分析
-  if (video.ctr > avgCtr * 1.5) {
-    strengths.push(`インプレッションCTRが高い（${video.ctr.toFixed(1)}% / 平均${avgCtr.toFixed(1)}%）`);
-  } else if (video.ctr < avgCtr * 0.6) {
-    weaknesses.push(`CTRが低い（${video.ctr.toFixed(1)}% / 平均${avgCtr.toFixed(1)}%）`);
-    improvements.push('サムネイルのデザインを見直し、視覚的インパクトを強化する');
-    improvements.push('タイトルに数字・感情的ワードを追加して興味を引く');
+  detailedInsights.push({
+    category: '視聴回数',
+    icon: 'eye.fill',
+    color: getRatingColor(viewsRating),
+    rating: viewsRating,
+    headline: `${formatNumber(video.views)}回（平均比 ${viewsRatio >= 1 ? '+' : ''}${((viewsRatio - 1) * 100).toFixed(0)}%）`,
+    detail: viewsRating === 'excellent'
+      ? `チャンネル内トップクラスの視聴回数です。タイトル・サムネイル・コンテンツの三拍子が揃った成功事例です。このパターンを他の動画にも応用しましょう。`
+      : viewsRating === 'good'
+      ? `平均を上回る良好な視聴回数です。投稿タイミングや関連動画への誘導を最適化することでさらに伸ばせます。`
+      : viewsRating === 'average'
+      ? `平均的な視聴回数です。インプレッションは${video.impressions > 0 ? formatNumber(video.impressions) + '回' : 'データなし'}。CTRを改善することで視聴回数を底上げできます。`
+      : `視聴回数が伸び悩んでいます。サムネイルとタイトルを大幅に見直すことで、同じコンテンツでも視聴回数を2〜3倍に改善できる可能性があります。`,
+    actionTip: viewsRating === 'poor' || viewsRating === 'average'
+      ? `類似テーマで高視聴回数の動画のサムネイル・タイトル構成を参考に、A/Bテストを実施してみましょう`
+      : `この動画の成功パターン（${contentType}）を次の企画に活かしましょう`,
+  });
+
+  // ② CTR（クリック率）分析
+  const ctrRating = getCtrRating(video.ctr, avgCtr);
+  if (ctrRating === 'excellent') {
+    strengths.push(`CTRが非常に高い（${video.ctr.toFixed(1)}% / 平均${avgCtr.toFixed(1)}%）。サムネイルとタイトルが視聴者の興味を強く引いています`);
+  } else if (ctrRating === 'poor') {
+    weaknesses.push(`CTRが低い（${video.ctr.toFixed(1)}% / 平均${avgCtr.toFixed(1)}%）。サムネイルかタイトルが視聴者に刺さっていない可能性があります`);
+    improvements.push(`サムネイルに「顔のアップ」「数字」「驚きの表情」を取り入れ、CTRを${avgCtr.toFixed(1)}%以上に改善する`);
+    improvements.push(`タイトルに「〇〇万円」「衝撃」「初公開」などの感情的ワードを追加してクリックを促す`);
   }
-  
-  // 高評価率分析
-  if (video.likeRate > 97) {
-    strengths.push(`高評価率が非常に高い（${video.likeRate}%）- 視聴者の満足度が高い`);
-  } else if (video.likeRate < 80) {
-    weaknesses.push(`高評価率が低い（${video.likeRate}%）- 視聴者の反応が分かれている`);
-    improvements.push('コンテンツの方向性を見直し、視聴者との共感ポイントを強化する');
+  detailedInsights.push({
+    category: 'クリック率（CTR）',
+    icon: 'arrow.up.right',
+    color: getRatingColor(ctrRating),
+    rating: ctrRating,
+    headline: `${video.ctr.toFixed(1)}%（平均 ${avgCtr.toFixed(1)}%）`,
+    detail: ctrRating === 'excellent'
+      ? `サムネイルとタイトルが非常に効果的です。視聴者がホーム画面やおすすめ欄でこの動画を見た時に、強くクリックしたくなる設計ができています。`
+      : ctrRating === 'good'
+      ? `CTRは良好です。さらにサムネイルの文字を大きくしたり、感情的な表情を使うことで5%超えを目指せます。`
+      : ctrRating === 'average'
+      ? `CTRは平均的です。インプレッション数が${video.impressions > 0 ? formatNumber(video.impressions) + '回' : '不明'}あるにもかかわらず視聴回数が伸びていない場合、サムネイル改善が最優先課題です。`
+      : `CTRが低く、多くのインプレッションが無駄になっています。サムネイルのデザインを根本から見直すことが急務です。競合チャンネルの高CTRサムネイルを参考にしましょう。`,
+    actionTip: ctrRating === 'poor'
+      ? `YouTube Studioのサムネイルテストを活用し、3パターンのサムネイルを比較テストしてみましょう`
+      : ctrRating === 'average'
+      ? `現在のサムネイルに「数字」や「顔のアップ」を追加するだけでCTRが改善するケースが多いです`
+      : `このサムネイルのデザインパターンを今後の動画にも積極的に採用しましょう`,
+  });
+
+  // ③ 視聴維持率分析
+  if (video.avgViewRate > 0) {
+    const retentionRating = getRetentionRating(video.avgViewRate);
+    if (retentionRating === 'excellent') {
+      strengths.push(`視聴維持率が非常に高い（${video.avgViewRate.toFixed(0)}%）。視聴者が最後まで見ている良質なコンテンツです`);
+    } else if (retentionRating === 'poor') {
+      weaknesses.push(`視聴維持率が低い（${video.avgViewRate.toFixed(0)}% / 平均${avgViewRate.toFixed(0)}%）。早期離脱が多い可能性があります`);
+      improvements.push(`動画の冒頭15秒で「この動画を見ると何が得られるか」を明確に提示し、視聴維持率を改善する`);
+      improvements.push(`チャプター機能を追加して視聴者が見たい部分にジャンプできるようにする`);
+    }
+    const durationMin = video.duration > 0 ? (video.duration / 60).toFixed(0) : '不明';
+    const avgWatchTime = video.duration > 0 && video.avgViewRate > 0
+      ? `${((video.duration * video.avgViewRate / 100) / 60).toFixed(1)}分`
+      : '不明';
+    detailedInsights.push({
+      category: '視聴維持率',
+      icon: 'clock.fill',
+      color: getRatingColor(retentionRating),
+      rating: retentionRating,
+      headline: `${video.avgViewRate.toFixed(0)}%（平均視聴時間 約${avgWatchTime}）`,
+      detail: retentionRating === 'excellent'
+        ? `視聴者の半数以上が動画を最後まで視聴しています。これはYouTubeアルゴリズムに非常に高く評価されるシグナルで、おすすめ欄への露出増加につながります。`
+        : retentionRating === 'good'
+        ? `良好な視聴維持率です。動画の長さ（${durationMin}分）に対して視聴者がしっかり見ています。冒頭の掴みをさらに強化することで50%超えを目指せます。`
+        : retentionRating === 'average'
+        ? `視聴維持率は平均的です。YouTube Studioの視聴維持率グラフで「急落ポイント」を確認し、その部分の編集を改善することが重要です。`
+        : `視聴維持率が低く、多くの視聴者が早期に離脱しています。冒頭30秒の構成を見直し、「結論を先出し」する構成に変更することを強く推奨します。`,
+      actionTip: retentionRating === 'poor' || retentionRating === 'average'
+        ? `YouTube Studioで視聴維持率グラフを確認し、視聴者が離脱するポイントを特定して編集を改善しましょう`
+        : `この動画の構成（冒頭の掴み・展開・締め）を次の動画のテンプレートとして活用しましょう`,
+    });
   }
-  
-  // 収益分析
-  if (video.estimatedRevenue > avgRevenue * 2) {
-    strengths.push(`収益が高い（${formatRevenue(video.estimatedRevenue)}）`);
-  } else if (video.estimatedRevenue > 0 && video.estimatedRevenue < avgRevenue * 0.3) {
-    weaknesses.push(`収益が平均を下回る（${formatRevenue(video.estimatedRevenue)}）`);
-    improvements.push('広告収益を高めるため、動画の長さを8〜15分に最適化する');
+
+  // ④ 高評価率分析
+  const likeRating = getLikeRating(video.likeRate);
+  if (likeRating === 'excellent') {
+    strengths.push(`高評価率が非常に高い（${video.likeRate.toFixed(0)}%）。視聴者の満足度が極めて高く、コミュニティからの支持が厚いです`);
+  } else if (likeRating === 'poor') {
+    weaknesses.push(`高評価率が低い（${video.likeRate.toFixed(0)}% / 平均${avgLikeRate.toFixed(0)}%）。コンテンツへの賛否が分かれている可能性があります`);
+    improvements.push(`動画の最後に「いいね」を促すCTAを追加し、高評価率を改善する`);
   }
-  
-  // 動画の長さ分析
+  detailedInsights.push({
+    category: '高評価率',
+    icon: 'hand.thumbsup.fill',
+    color: getRatingColor(likeRating),
+    rating: likeRating,
+    headline: `${video.likeRate.toFixed(0)}%（平均 ${avgLikeRate.toFixed(0)}%）`,
+    detail: likeRating === 'excellent'
+      ? `視聴者の97%以上が高評価をつけており、コンテンツへの満足度が非常に高いです。このジャンルのコンテンツは視聴者との相性が抜群です。`
+      : likeRating === 'good'
+      ? `高評価率は良好です。視聴者の大多数がコンテンツに満足しています。動画の最後に「いいね」を促すことでさらに改善できます。`
+      : likeRating === 'average'
+      ? `高評価率は平均的です。コンテンツの方向性や視聴者層との相性を見直す余地があります。コメントを分析して視聴者の反応を確認しましょう。`
+      : `高評価率が低く、視聴者の反応が分かれています。コメント欄を確認して批判的な意見の傾向を把握し、コンテンツの改善に活かしましょう。`,
+    actionTip: likeRating === 'poor'
+      ? `コメント欄の批判的な意見を分析し、次の動画で改善点を明示することで信頼回復につながります`
+      : `動画の最後に「参考になった方はいいねをお願いします」と一言添えるだけで高評価率が改善します`,
+  });
+
+  // ⑤ 収益分析
+  if (video.estimatedRevenue > 0) {
+    const revenueRatio = video.estimatedRevenue / avgRevenue;
+    const revenueRating: 'excellent' | 'good' | 'average' | 'poor' = revenueRatio >= 2 ? 'excellent' : revenueRatio >= 1 ? 'good' : revenueRatio >= 0.5 ? 'average' : 'poor';
+    if (revenueRating === 'excellent') {
+      strengths.push(`収益が平均の${revenueRatio.toFixed(1)}倍（${formatRevenue(video.estimatedRevenue)}）。広告単価の高いコンテンツです`);
+    } else if (revenueRating === 'poor') {
+      weaknesses.push(`収益が平均を下回る（${formatRevenue(video.estimatedRevenue)} / 平均${formatRevenue(Math.round(avgRevenue))}）`);
+      improvements.push(`動画の長さを8分以上にして広告挿入ポイントを増やし、収益単価を向上させる`);
+    }
+    const rpm = video.views > 0 ? (video.estimatedRevenue / video.views * 1000) : 0;
+    detailedInsights.push({
+      category: '収益パフォーマンス',
+      icon: 'dollarsign.circle.fill',
+      color: getRatingColor(revenueRating),
+      rating: revenueRating,
+      headline: `${formatRevenue(video.estimatedRevenue)}（RPM: ¥${rpm.toFixed(0)}/千回）`,
+      detail: revenueRating === 'excellent'
+        ? `収益が非常に高く、広告単価の高いコンテンツです。RPM（千回視聴あたりの収益）が高いことは、広告主が好むコンテンツカテゴリであることを示します。`
+        : revenueRating === 'good'
+        ? `収益は良好です。動画の長さが${video.duration > 0 ? formatDuration(video.duration) : '不明'}で、広告挿入の最適化余地があります。8分以上の動画は広告収益が大幅に向上します。`
+        : revenueRating === 'average'
+        ? `収益は平均的です。視聴回数に対してRPMを高めるには、金融・不動産・ビジネス系のキーワードを含むコンテンツが効果的です。`
+        : `収益が低めです。動画の長さ（${video.duration > 0 ? formatDuration(video.duration) : '不明'}）や広告フォーマットの見直しで改善できる可能性があります。`,
+      actionTip: revenueRating === 'poor' || revenueRating === 'average'
+        ? `YouTube Studioの「収益化」タブでRPMの高い動画のカテゴリを確認し、そのジャンルのコンテンツを増やしましょう`
+        : `この動画のRPMパターンを参考に、類似テーマの動画を定期的に投稿することで収益を安定させましょう`,
+    });
+  }
+
+  // ⑥ インプレッション分析
+  if (video.impressions > 0) {
+    const impressionsRatio = video.impressions / avgImpressions;
+    const impressionsRating: 'excellent' | 'good' | 'average' | 'poor' = impressionsRatio >= 2 ? 'excellent' : impressionsRatio >= 1 ? 'good' : impressionsRatio >= 0.5 ? 'average' : 'poor';
+    detailedInsights.push({
+      category: 'インプレッション',
+      icon: 'eye.fill',
+      color: getRatingColor(impressionsRating),
+      rating: impressionsRating,
+      headline: `${formatNumber(video.impressions)}回（平均比 ${impressionsRatio >= 1 ? '+' : ''}${((impressionsRatio - 1) * 100).toFixed(0)}%）`,
+      detail: impressionsRating === 'excellent'
+        ? `インプレッション数が非常に多く、YouTubeアルゴリズムに積極的に推薦されています。このコンテンツはホーム画面やおすすめ欄への露出が多い優良コンテンツです。`
+        : impressionsRating === 'good'
+        ? `インプレッション数は良好です。アルゴリズムに一定程度評価されています。CTRをさらに高めることで視聴回数を大幅に増やせます。`
+        : impressionsRating === 'average'
+        ? `インプレッション数は平均的です。投稿直後のエンゲージメント（いいね・コメント・シェア）を高めることでアルゴリズムの評価が向上します。`
+        : `インプレッション数が少なく、アルゴリズムにあまり推薦されていません。タグ・説明文の最適化と、投稿後24時間以内のエンゲージメント獲得が重要です。`,
+      actionTip: impressionsRating === 'poor' || impressionsRating === 'average'
+        ? `投稿直後にコミュニティ投稿やSNSでシェアし、初動のエンゲージメントを高めてアルゴリズムの評価を上げましょう`
+        : `この動画の投稿タイミングや説明文のキーワードを他の動画にも応用しましょう`,
+    });
+  }
+
+  // ⑦ 動画の長さ分析
   if (video.duration > 0) {
     const durationMin = video.duration / 60;
-    if (durationMin < 3) {
-      improvements.push('動画が短すぎる可能性がある。広告収益最大化のため5分以上を目指す');
+    const durationRating: 'excellent' | 'good' | 'average' | 'poor' = 
+      (durationMin >= 8 && durationMin <= 20) ? 'excellent' :
+      (durationMin >= 5 && durationMin < 8) || (durationMin > 20 && durationMin <= 30) ? 'good' :
+      (durationMin >= 3 && durationMin < 5) || (durationMin > 30 && durationMin <= 45) ? 'average' : 'poor';
+    
+    if (durationMin < 3 && !video.isShort) {
+      improvements.push(`動画が短すぎます（${formatDuration(video.duration)}）。広告収益最大化のため8分以上を目指してください`);
     } else if (durationMin > 30) {
-      improvements.push('長尺動画は離脱率が高い傾向がある。チャプター機能の活用を検討する');
+      improvements.push(`長尺動画（${formatDuration(video.duration)}）は離脱率が高い傾向があります。チャプター機能の活用を強く推奨します`);
+    }
+    
+    if (!video.isShort) {
+      detailedInsights.push({
+        category: '動画の長さ',
+        icon: 'play.fill',
+        color: getRatingColor(durationRating),
+        rating: durationRating,
+        headline: `${formatDuration(video.duration)}（${durationMin >= 8 ? '広告収益最適' : durationMin >= 5 ? '収益化可能' : '短尺'}）`,
+        detail: durationRating === 'excellent'
+          ? `8〜20分の動画は広告収益と視聴維持率のバランスが最も良い長さです。複数の広告挿入ポイントを設定でき、収益を最大化できます。`
+          : durationRating === 'good'
+          ? `動画の長さは概ね適切です。${durationMin < 8 ? '8分以上にすることで広告挿入ポイントが増え、収益が向上します。' : '長尺動画はチャプター機能を活用して視聴者の利便性を高めましょう。'}`
+          : durationMin < 5
+          ? `動画が短く、広告収益の最大化が難しい状態です。同じテーマでより深掘りしたコンテンツを作ることで、視聴時間と収益を同時に改善できます。`
+          : `非常に長い動画（${formatDuration(video.duration)}）は視聴維持率が下がりやすいです。YouTube Studioで視聴維持率グラフを確認し、不要な部分をカットすることを検討してください。`,
+        actionTip: durationMin < 8 && !video.isShort
+          ? `次回の同テーマ動画は8〜15分を目標に、より詳細な情報や裏話を追加してみましょう`
+          : durationMin > 30
+          ? `動画にチャプターを追加し、視聴者が見たい部分にすぐアクセスできるようにしましょう`
+          : `この動画の長さは最適です。同じ長さのフォーマットを維持しましょう`,
+      });
     }
   }
-  
-  // 平均視聴率分析
-  if (video.avgViewRate > 0) {
-    if (video.avgViewRate > 50) {
-      strengths.push(`平均視聴率が高い（${video.avgViewRate.toFixed(0)}%）- 最後まで見られている`);
-    } else if (video.avgViewRate < 20) {
-      weaknesses.push(`平均視聴率が低い（${video.avgViewRate.toFixed(0)}%）- 早期離脱が多い`);
-      improvements.push('冠頤30秒で視聴者を引き込む構成に改善する');
-      improvements.push('動画の冠頤30秒に「この動画で分かること」を提示する');
-    }
-  }
-  
+
   // デフォルトの改善提案
   if (improvements.length === 0) {
-    improvements.push('定期的な投稿スケジュールを維持してアルゴリズムの優遇を受ける');
-    improvements.push('コメント欄での視聴者との積極的なコミュニケーションを図る');
+    improvements.push('定期的な投稿スケジュール（週2〜3本）を維持してアルゴリズムの優遇を受ける');
+    improvements.push('コメント欄での視聴者との積極的なコミュニケーションを図り、エンゲージメントを高める');
+    improvements.push('動画の最後に次の動画への誘導（エンドスクリーン）を追加して視聴継続率を向上させる');
   }
   
-  // サマリー生成
+  // サマリー生成（より詳細に）
+  const topMetric = video.views > avgViews * 2 ? `視聴回数${formatNumber(video.views)}回` :
+    video.ctr > avgCtr * 1.5 ? `CTR${video.ctr.toFixed(1)}%` :
+    video.avgViewRate > 50 ? `視聴維持率${video.avgViewRate.toFixed(0)}%` : null;
+  
   const summary = grade === 'S' 
-    ? `このコンテンツはチャンネル内でトップクラスのパフォーマンスを発揮しています。${contentType}として非常に成功した事例です。`
+    ? `このコンテンツはチャンネル内でトップクラスのパフォーマンスを発揮しています。${topMetric ? `特に${topMetric}が際立っており、` : ''}${contentType}として非常に成功した事例です。このパターンを積極的に再現することを強く推奨します。`
     : grade === 'A'
-    ? `平均を上回る良好なパフォーマンスです。いくつかの改善点を実施することでさらに伸ばせます。`
+    ? `平均を上回る良好なパフォーマンスです。${topMetric ? `${topMetric}は優秀ですが、` : ''}いくつかの指標を改善することでSランク動画に近づけます。特にCTRと視聴維持率の最適化が効果的です。`
     : grade === 'B'
-    ? `平均的なパフォーマンスです。CTRや視聴維持率の改善で大きく伸びる可能性があります。`
+    ? `平均的なパフォーマンスです。${video.ctr < avgCtr ? 'CTRの改善' : '視聴維持率の向上'}が最優先課題です。サムネイルとタイトルの見直し、冒頭30秒の構成改善で大きく伸びる可能性があります。`
     : grade === 'C'
-    ? `パフォーマンスが平均を下回っています。サムネイル・タイトル・構成の見直しが必要です。`
-    : `このコンテンツは改善の余地が大きいです。成功している動画のパターンを参考に大幅な見直しを検討してください。`;
+    ? `パフォーマンスが平均を下回っています。サムネイル・タイトル・動画構成の総合的な見直しが必要です。成功している動画（Sランク・Aランク）のパターンを分析して改善のヒントを得ましょう。`
+    : `このコンテンツは改善の余地が大きいです。まずサムネイルとタイトルを刷新し、次に動画冒頭の構成を「結論先出し」スタイルに変更することを推奨します。成功している動画のパターンを徹底的に参考にしてください。`;
   
   return {
     videoId: video.id,
@@ -130,6 +347,7 @@ export function analyzeVideo(video: VideoData): VideoAnalysis {
     improvements,
     contentType,
     summary,
+    detailedInsights,
   };
 }
 
@@ -296,7 +514,7 @@ export function generateChannelInsights(videos: VideoData[], summary: any): Chan
     },
     {
       title: 'CTRパフォーマンス',
-      content: `チャンネル全体のCTR平均は${avgCtr.toFixed(1)}%です。${avgCtr > 5 ? 'サムネイルと タイトルが効果的に機能しています。' : 'サムネイルとタイトルの改善でCTRを向上させる余地があります。'}CTRが5%以上の動画は視聴回数も高い傾向があります。`,
+      content: `チャンネル全体のCTR平均は${avgCtr.toFixed(1)}%です。${avgCtr > 5 ? 'サムネイルとタイトルが効果的に機能しています。' : 'サムネイルとタイトルの改善でCTRを向上させる余地があります。'}CTRが5%以上の動画は視聴回数も高い傾向があります。`,
       icon: 'arrow.up.right',
       color: '#8B5CF6',
     },

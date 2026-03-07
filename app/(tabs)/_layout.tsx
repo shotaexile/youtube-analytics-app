@@ -9,8 +9,8 @@ import { useColors } from "@/hooks/use-colors";
 export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
-  const tabBarHeight = 56 + bottomPadding;
+  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 16);
+  const tabBarHeight = Platform.OS === "web" ? 68 : 72 + bottomPadding;
 
   return (
     <Tabs
@@ -27,9 +27,11 @@ export default function TabLayout() {
           borderTopColor: colors.border,
           borderTopWidth: 0.5,
         },
-        tabBarLabelStyle: {
+          tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
+          marginBottom: Platform.OS === "web" ? 0 : 4,
+          lineHeight: 14,
         },
       }}
     >
