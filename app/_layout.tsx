@@ -25,6 +25,23 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+// Read CSS env(safe-area-inset-*) values injected by the browser for PWA standalone mode
+function getWebSafeAreaInsets(): EdgeInsets {
+  if (typeof window === "undefined" || typeof document === "undefined") return DEFAULT_WEB_INSETS;
+  try {
+    const style = getComputedStyle(document.documentElement);
+    const parse = (v: string) => parseFloat(v) || 0;
+    return {
+      top: parse(style.getPropertyValue("--sat")),
+      right: parse(style.getPropertyValue("--sar")),
+      bottom: parse(style.getPropertyValue("--sab")),
+      left: parse(style.getPropertyValue("--sal")),
+    };
+  } catch {
+    return DEFAULT_WEB_INSETS;
+  }
+}
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -343,7 +360,9 @@ export default function RootLayout() {
 
 function RootLayoutInner() {
   const { isAuthenticated, login } = useAuth();
-  const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
+  const initialInsets = Platform.OS === "web"
+    ? getWebSafeAreaInsets()
+    : (initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS);
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
@@ -369,7 +388,22 @@ function RootLayoutInner() {
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const unsubscribe = subscribeSafeAreaInsets(handleSafeAreaUpdate);
-    return () => unsubscribe();
+
+    // Also update safe area on resize (covers PWA orientation changes)
+    const handleResize = () => {
+      const webInsets = getWebSafeAreaInsets();
+      const webFrame = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+      setInsets(webInsets);
+      setFrame(webFrame);
+    };
+    window.addEventListener("resize", handleResize);
+    // Run once after mount so CSS env() values are resolved
+    setTimeout(handleResize, 100);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("resize", handleResize);
+    };
   }, [handleSafeAreaUpdate]);
 
   // Create clients once and reuse them
@@ -387,6 +421,19 @@ function RootLayoutInner() {
   const [trpcClient] = useState(() => createTRPCClient());
 
   const providerInitialMetrics = useMemo(() => {
+    // For web (including PWA), use the CSS env() safe area values directly
+    // For native, fall back to initialWindowMetrics with minimum padding
+    if (Platform.OS === "web") {
+      return {
+        insets,
+        frame: {
+          x: 0,
+          y: 0,
+          width: typeof window !== "undefined" ? window.innerWidth : 390,
+          height: typeof window !== "undefined" ? window.innerHeight : 844,
+        },
+      };
+    }
     const metrics = initialWindowMetrics ?? { insets: initialInsets, frame: initialFrame };
     return {
       ...metrics,
@@ -396,7 +443,7 @@ function RootLayoutInner() {
         bottom: Math.max(metrics.insets.bottom, 12),
       },
     };
-  }, [initialInsets, initialFrame]);
+  }, [insets, initialInsets, initialFrame]);
 
   // While checking auth state, show nothing (or a brief blank screen)
   if (isAuthenticated === null) {

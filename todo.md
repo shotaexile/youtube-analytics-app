@@ -162,3 +162,6 @@
   - [x] サーバーAPI: searchTrendDetail（キーワード深掘り検索）
   - [x] フロントエンド: ideas.tsx（企画提案タブ画面）
   - [x] タブナビゲーションに「企画提案」タブを追加
+
+## 修正タスク Round 19（ユーザー指示）
+- [x] SafariでPWA（ホーム画面追加）として使用した際の表示ずれを修正（viewport-fit=cover + CSS env(safe-area-inset-*)でExpo Goと同じ表示に対応）

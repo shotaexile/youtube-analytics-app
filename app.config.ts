@@ -83,6 +83,7 @@ const config: ExpoConfig = {
     bundler: "metro",
     output: "static",
     favicon: "./assets/images/favicon.png",
+    viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   },
   plugins: [
     "expo-router",

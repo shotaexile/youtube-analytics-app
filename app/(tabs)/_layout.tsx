@@ -5,14 +5,25 @@ import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 
+function getWebBottomInset(): number {
+  if (typeof window === "undefined" || typeof document === "undefined") return 0;
+  try {
+    const val = getComputedStyle(document.documentElement).getPropertyValue("--sab");
+    return parseFloat(val) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
   // CONTENT_HEIGHT = the visible area for icon + label (above the home indicator)
-  // Increase this so the icon+label sit comfortably above the bottom bezel.
-  const CONTENT_HEIGHT = Platform.OS === "web" ? 52 : 62;
-  const bottomInset = Platform.OS === "web" ? 0 : Math.max(insets.bottom, 20);
+  const CONTENT_HEIGHT = 52;
+  // For web/PWA: read CSS env(safe-area-inset-bottom) so tab bar clears the home indicator
+  const webBottomInset = Platform.OS === "web" ? Math.max(getWebBottomInset(), insets.bottom) : 0;
+  const bottomInset = Platform.OS === "web" ? webBottomInset : Math.max(insets.bottom, 20);
   const tabBarHeight = CONTENT_HEIGHT + bottomInset;
 
   return (

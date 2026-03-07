@@ -68,13 +68,53 @@ for (const bundle of bundles) {
   }
 }
 
-// ── 4. Fix index.html icon paths ─────────────────────────────────────────────
+// ── 4. Fix index.html icon paths + viewport-fit=cover ───────────────────────
 const indexPath = path.join(DIST, "index.html");
 let indexHtml = fs.readFileSync(indexPath, "utf8");
 indexHtml = indexHtml
   .replace(/href="\/assets\/\.\/assets\/images\/apple-touch-icon\.png"/g, 'href="/apple-touch-icon.png"')
   .replace(/href="\/assets\/\.\/assets\/images\/favicon\.png"/g, 'href="/favicon.png"')
   .replace(/href="\/favicon\.ico"/g, 'href="/favicon.png"');
+
+// Ensure viewport meta has viewport-fit=cover for PWA safe area support
+if (indexHtml.includes('name="viewport"')) {
+  // Replace existing viewport meta to add viewport-fit=cover
+  indexHtml = indexHtml.replace(
+    /<meta\s+name="viewport"[^>]*>/g,
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+  );
+  console.log("✅ Patched viewport meta with viewport-fit=cover");
+} else {
+  // Insert viewport meta before </head>
+  indexHtml = indexHtml.replace(
+    '</head>',
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>'
+  );
+  console.log("✅ Inserted viewport meta with viewport-fit=cover");
+}
+
+// Also patch all other HTML files
+const htmlFiles = [];
+const walkHtml = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkHtml(full);
+    else if (entry.name.endsWith('.html') && full !== indexPath) htmlFiles.push(full);
+  }
+};
+walkHtml(DIST);
+for (const htmlFile of htmlFiles) {
+  let html = fs.readFileSync(htmlFile, 'utf8');
+  if (html.includes('name="viewport"')) {
+    const patched = html.replace(
+      /<meta\s+name="viewport"[^>]*>/g,
+      '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+    );
+    if (patched !== html) fs.writeFileSync(htmlFile, patched, 'utf8');
+  }
+}
+console.log(`✅ Patched viewport in ${htmlFiles.length} additional HTML files`);
+
 fs.writeFileSync(indexPath, indexHtml, "utf8");
 console.log("✅ Fixed index.html icon paths");
 
