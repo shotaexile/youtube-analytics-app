@@ -875,3 +875,285 @@ export function getCategoryStats() {
 
   return result.filter(r => r.count > 0);
 }
+
+// ========== 投稿最適時間ヒートマップ ==========
+// 曜日×月別の投稿パフォーマンス分析
+export function getPostingHeatmapData() {
+  const videos = parseVideoData();
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  // 月を4つのグループに分ける（四半期）
+  const monthGroups = [
+    { label: '1-3月', months: [0, 1, 2] },
+    { label: '4-6月', months: [3, 4, 5] },
+    { label: '7-9月', months: [6, 7, 8] },
+    { label: '10-12月', months: [9, 10, 11] },
+  ];
+
+  // 曜日×四半期のマトリックス
+  const matrix: { day: string; period: string; count: number; avgViews: number; avgCtr: number; totalViews: number; totalCtr: number }[] = [];
+
+  for (const day of days) {
+    for (const group of monthGroups) {
+      matrix.push({ day, period: group.label, count: 0, avgViews: 0, avgCtr: 0, totalViews: 0, totalCtr: 0 });
+    }
+  }
+
+  for (const video of videos) {
+    const date = video.publishedDate;
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue;
+    const dow = date.getDay();
+    const month = date.getMonth();
+    const groupIdx = monthGroups.findIndex(g => g.months.includes(month));
+    if (groupIdx < 0) continue;
+    const cell = matrix.find(m => m.day === days[dow] && m.period === monthGroups[groupIdx].label);
+    if (cell) {
+      cell.count += 1;
+      cell.totalViews += video.views;
+      cell.totalCtr += video.ctr;
+    }
+  }
+
+  for (const cell of matrix) {
+    cell.avgViews = cell.count > 0 ? Math.round(cell.totalViews / cell.count) : 0;
+    cell.avgCtr = cell.count > 0 ? parseFloat((cell.totalCtr / cell.count).toFixed(2)) : 0;
+  }
+
+  return { matrix, days, periods: monthGroups.map(g => g.label) };
+}
+
+// 曜日別の詳細パフォーマンス（投稿数・平均視聴回数・平均CTR）
+export function getDayOfWeekDetailedStats() {
+  const videos = parseVideoData();
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const stats = days.map(d => ({
+    day: d,
+    count: 0,
+    totalViews: 0,
+    avgViews: 0,
+    totalCtr: 0,
+    avgCtr: 0,
+    totalRevenue: 0,
+    avgRevenue: 0,
+  }));
+
+  for (const video of videos) {
+    const date = video.publishedDate;
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue;
+    const dow = date.getDay();
+    stats[dow].count += 1;
+    stats[dow].totalViews += video.views;
+    stats[dow].totalCtr += video.ctr;
+    if (video.estimatedRevenue > 0) {
+      stats[dow].totalRevenue += video.estimatedRevenue;
+    }
+  }
+
+  for (const s of stats) {
+    s.avgViews = s.count > 0 ? Math.round(s.totalViews / s.count) : 0;
+    s.avgCtr = s.count > 0 ? parseFloat((s.totalCtr / s.count).toFixed(2)) : 0;
+    s.avgRevenue = s.count > 0 ? Math.round(s.totalRevenue / s.count) : 0;
+  }
+
+  return stats;
+}
+
+// ========== 連続投稿カレンダー ==========
+export function getPostingCalendarData(months: number = 12) {
+  const videos = parseVideoData();
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setMonth(startDate.getMonth() - months);
+  startDate.setDate(1);
+
+  // 日付ごとの投稿数マップ
+  const postMap: Record<string, { count: number; views: number; titles: string[] }> = {};
+
+  for (const video of videos) {
+    const date = video.publishedDate;
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue;
+    if (date < startDate) continue;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    if (!postMap[key]) {
+      postMap[key] = { count: 0, views: 0, titles: [] };
+    }
+    postMap[key].count += 1;
+    postMap[key].views += video.views;
+    postMap[key].titles.push(video.title);
+  }
+
+  // 週ごとにグループ化（GitHubスタイル）
+  const weeks: { date: string; count: number; views: number; titles: string[] }[][] = [];
+  let currentWeek: { date: string; count: number; views: number; titles: string[] }[] = [];
+
+  // 開始日を日曜日に合わせる
+  const adjustedStart = new Date(startDate);
+  adjustedStart.setDate(adjustedStart.getDate() - adjustedStart.getDay());
+
+  const current = new Date(adjustedStart);
+  while (current <= now) {
+    const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+    const data = postMap[key] || { count: 0, views: 0, titles: [] };
+    currentWeek.push({ date: key, ...data });
+
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  if (currentWeek.length > 0) {
+    weeks.push(currentWeek);
+  }
+
+  // 連続投稿ストリーク計算
+  const sortedDates = Object.keys(postMap).sort();
+  let maxStreak = 0;
+  let currentStreak = 0;
+  let streakEnd = '';
+  let prevDate: Date | null = null;
+
+  for (const dateStr of sortedDates) {
+    const d = new Date(dateStr);
+    if (prevDate) {
+      const diff = (d.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        currentStreak += 1;
+        if (currentStreak > maxStreak) {
+          maxStreak = currentStreak;
+          streakEnd = dateStr;
+        }
+      } else {
+        currentStreak = 1;
+      }
+    } else {
+      currentStreak = 1;
+    }
+    prevDate = d;
+  }
+
+  // 現在の連続投稿数
+  let todayStreak = 0;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const checkDate = new Date(today);
+  while (true) {
+    const checkStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+    if (postMap[checkStr]) {
+      todayStreak += 1;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  const totalPostDays = Object.keys(postMap).length;
+  const totalPosts = Object.values(postMap).reduce((s, v) => s + v.count, 0);
+
+  return {
+    weeks,
+    postMap,
+    maxStreak,
+    streakEnd,
+    todayStreak,
+    totalPostDays,
+    totalPosts,
+  };
+}
+
+// ========== 収益シミュレーター ==========
+export function getRevenueSimulatorData() {
+  const videos = parseVideoData();
+  const monthlyData = getMonthlyStats();
+
+  // 直近12ヶ月のデータを取得
+  const recentMonths = monthlyData.slice(-12);
+
+  // 平均CPM（収益/視聴回数×1000）を計算
+  const validMonths = recentMonths.filter(m => m.revenue > 0 && m.views > 0);
+  const avgCpm = validMonths.length > 0
+    ? validMonths.reduce((s, m) => s + (m.revenue / m.views * 1000), 0) / validMonths.length
+    : 0;
+
+  // 月別収益トレンド
+  const revenueTrend = recentMonths.map(m => ({
+    label: m.month,
+    revenue: m.revenue,
+    views: m.views,
+    videoCount: m.videoCount,
+    cpm: m.views > 0 ? parseFloat((m.revenue / m.views * 1000).toFixed(0)) : 0,
+  }));
+
+  // 直近3ヶ月の平均値
+  const last3 = recentMonths.slice(-3).filter(m => m.revenue > 0);
+  const avgMonthlyRevenue = last3.length > 0 ? last3.reduce((s, m) => s + m.revenue, 0) / last3.length : 0;
+  const avgMonthlyViews = last3.length > 0 ? last3.reduce((s, m) => s + m.views, 0) / last3.length : 0;
+  const avgMonthlyVideos = last3.length > 0 ? last3.reduce((s, m) => s + m.videoCount, 0) / last3.length : 0;
+
+  // 来月予測（直近3ヶ月の平均）
+  const predictedRevenue = Math.round(avgMonthlyRevenue);
+  const predictedViews = Math.round(avgMonthlyViews);
+
+  // ショート動画の割合
+  const shortVideos = videos.filter(v => v.isShort);
+  const regularVideos = videos.filter(v => !v.isShort && !v.isPrivate);
+  const shortRatio = videos.length > 0 ? shortVideos.length / videos.length : 0;
+
+  // 仮説シミュレーション
+  const simulations = [
+    {
+      label: 'ショートを週2本追加',
+      description: '毎週2本のショート動画を追加投稿した場合',
+      additionalVideos: 8,
+      avgViewsPerShort: shortVideos.length > 0 ? Math.round(shortVideos.reduce((s, v) => s + v.views, 0) / shortVideos.length) : 0,
+      revenueMultiplier: 1.0, // ショートは収益が低い
+      estimatedAdditionalRevenue: 0,
+      estimatedAdditionalViews: 0,
+    },
+    {
+      label: 'CTRを1%改善',
+      description: 'サムネイル改善でCTRが全動画で1%上昇した場合',
+      additionalVideos: 0,
+      avgViewsPerShort: 0,
+      revenueMultiplier: 1.15,
+      estimatedAdditionalRevenue: Math.round(avgMonthlyRevenue * 0.15),
+      estimatedAdditionalViews: Math.round(avgMonthlyViews * 0.15),
+    },
+    {
+      label: '投稿頻度を週1本増加',
+      description: '毎週1本多く一般動画を投稿した場合',
+      additionalVideos: 4,
+      avgViewsPerShort: regularVideos.length > 0 ? Math.round(regularVideos.reduce((s, v) => s + v.views, 0) / regularVideos.length) : 0,
+      revenueMultiplier: 1.0,
+      estimatedAdditionalRevenue: 0,
+      estimatedAdditionalViews: 0,
+    },
+  ];
+
+  // ショート追加シミュレーション
+  const avgShortViews = shortVideos.length > 0 ? shortVideos.reduce((s, v) => s + v.views, 0) / shortVideos.length : 0;
+  const avgShortRevenue = shortVideos.filter(v => v.estimatedRevenue > 0).length > 0
+    ? shortVideos.filter(v => v.estimatedRevenue > 0).reduce((s, v) => s + v.estimatedRevenue, 0) / shortVideos.filter(v => v.estimatedRevenue > 0).length
+    : 0;
+  simulations[0].estimatedAdditionalViews = Math.round(avgShortViews * 8);
+  simulations[0].estimatedAdditionalRevenue = Math.round(avgShortRevenue * 8);
+
+  // 投稿頻度増加シミュレーション
+  const avgRegularViews = regularVideos.length > 0 ? regularVideos.reduce((s, v) => s + v.views, 0) / regularVideos.length : 0;
+  const avgRegularRevenue = regularVideos.filter(v => v.estimatedRevenue > 0).length > 0
+    ? regularVideos.filter(v => v.estimatedRevenue > 0).reduce((s, v) => s + v.estimatedRevenue, 0) / regularVideos.filter(v => v.estimatedRevenue > 0).length
+    : 0;
+  simulations[2].estimatedAdditionalViews = Math.round(avgRegularViews * 4);
+  simulations[2].estimatedAdditionalRevenue = Math.round(avgRegularRevenue * 4);
+
+  return {
+    revenueTrend,
+    avgCpm: parseFloat(avgCpm.toFixed(0)),
+    avgMonthlyRevenue,
+    avgMonthlyViews,
+    avgMonthlyVideos: parseFloat(avgMonthlyVideos.toFixed(1)),
+    predictedRevenue,
+    predictedViews,
+    simulations,
+    shortRatio: parseFloat((shortRatio * 100).toFixed(1)),
+  };
+}

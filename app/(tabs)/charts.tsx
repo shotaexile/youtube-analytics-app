@@ -2,13 +2,22 @@ import { ScrollView, Text, View, TouchableOpacity, Dimensions, RefreshControl } 
 import { useState, useMemo, useCallback } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { formatNumber, getDayOfWeekStats, getHourOfDayStats, getCategoryStats } from "@/lib/data/csv-parser";
+import {
+  formatNumber,
+  getDayOfWeekStats,
+  getHourOfDayStats,
+  getCategoryStats,
+  getPostingHeatmapData,
+  getDayOfWeekDetailedStats,
+  getPostingCalendarData,
+  getRevenueSimulatorData,
+} from "@/lib/data/csv-parser";
 import { useVideos, useMonthlyStats } from "@/lib/data/use-analytics";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
 
-type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter' | 'weekday' | 'category' | 'shorts';
+type ChartTab = 'monthly' | 'ctr' | 'duration' | 'scatter' | 'weekday' | 'category' | 'shorts' | 'heatmap' | 'calendar' | 'simulator';
 
 const CHART_TABS: { key: ChartTab; label: string; emoji: string }[] = [
   { key: 'monthly', label: '月別推移', emoji: '📈' },
@@ -18,6 +27,9 @@ const CHART_TABS: { key: ChartTab; label: string; emoji: string }[] = [
   { key: 'weekday', label: '曜日分析', emoji: '📅' },
   { key: 'category', label: 'カテゴリ', emoji: '🏷️' },
   { key: 'shorts', label: 'ショート', emoji: '⚡' },
+  { key: 'heatmap', label: '最適時間', emoji: '🔥' },
+  { key: 'calendar', label: '投稿記録', emoji: '🌿' },
+  { key: 'simulator', label: '収益予測', emoji: '🔮' },
 ];
 
 // 縦棒グラフ（月別推移用）- 値ラベル付き
@@ -198,9 +210,45 @@ function ScatterPlot({ videos }: { videos: any[] }) {
   );
 }
 
+// ヒートマップセル
+function HeatmapCell({ value, maxValue, label }: { value: number; maxValue: number; label?: string }) {
+  const intensity = maxValue > 0 ? value / maxValue : 0;
+  const bgColor = intensity === 0
+    ? '#F3F4F6'
+    : intensity < 0.25
+    ? '#FEE2E2'
+    : intensity < 0.5
+    ? '#FCA5A5'
+    : intensity < 0.75
+    ? '#F87171'
+    : '#EF4444';
+  const textColor = intensity > 0.5 ? 'white' : '#374151';
+  return (
+    <View style={{ flex: 1, aspectRatio: 1, backgroundColor: bgColor, borderRadius: 6, alignItems: 'center', justifyContent: 'center', margin: 2 }}>
+      {label && <Text style={{ fontSize: 8, color: textColor, fontWeight: '600' }} numberOfLines={1}>{label}</Text>}
+    </View>
+  );
+}
+
+// GitHubスタイルの投稿カレンダーセル
+function CalendarCell({ count, date }: { count: number; date: string }) {
+  const bgColor = count === 0
+    ? '#EBEDF0'
+    : count === 1
+    ? '#9BE9A8'
+    : count === 2
+    ? '#40C463'
+    : '#216E39';
+  return (
+    <View style={{ width: 11, height: 11, backgroundColor: bgColor, borderRadius: 2, margin: 1 }} />
+  );
+}
+
 export default function ChartsScreen() {
   const [activeTab, setActiveTab] = useState<ChartTab>('monthly');
   const [refreshing, setRefreshing] = useState(false);
+  const [simVideosPerWeek, setSimVideosPerWeek] = useState(0);
+  const [simCtrBoost, setSimCtrBoost] = useState(0);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -211,6 +259,10 @@ export default function ChartsScreen() {
   const dayOfWeekStats = useMemo(() => getDayOfWeekStats(), []);
   const monthlyPatternStats = useMemo(() => getHourOfDayStats(), []);
   const categoryStats = useMemo(() => getCategoryStats(), []);
+  const heatmapData = useMemo(() => getPostingHeatmapData(), []);
+  const dayDetailedStats = useMemo(() => getDayOfWeekDetailedStats(), []);
+  const calendarData = useMemo(() => getPostingCalendarData(12), []);
+  const simulatorData = useMemo(() => getRevenueSimulatorData(), []);
 
   // Shorts-specific data
   const shortVideos = useMemo(() => videos.filter(v => v.isShort), [videos]);
@@ -309,6 +361,26 @@ export default function ChartsScreen() {
       return { label: bucket.label, value: Math.round(avg) };
     });
   }, [videos, durationDistribution]);
+
+  // シミュレーター計算
+  const simulatedRevenue = useMemo(() => {
+    const base = simulatorData.predictedRevenue;
+    const shortSim = simulatorData.simulations[0];
+    const ctrSim = simulatorData.simulations[1];
+    const regularSim = simulatorData.simulations[2];
+
+    let total = base;
+    // 追加ショート動画
+    if (simVideosPerWeek > 0) {
+      const avgShortRev = shortSim.estimatedAdditionalRevenue / 8;
+      total += avgShortRev * simVideosPerWeek * 4;
+    }
+    // CTR改善
+    if (simCtrBoost > 0) {
+      total += base * (simCtrBoost * 0.15);
+    }
+    return Math.round(total);
+  }, [simulatorData, simVideosPerWeek, simCtrBoost]);
 
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
@@ -548,6 +620,7 @@ export default function ChartsScreen() {
               </View>
             </>
           )}
+
           {/* Shorts Tab */}
           {activeTab === 'shorts' && (
             <>
@@ -633,6 +706,372 @@ export default function ChartsScreen() {
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
                         <Text style={{ fontSize: 11, color: '#3B82F6', fontWeight: '600' }}>{formatNumber(video.views)}回</Text>
                         <Text style={{ fontSize: 11, color: '#9CA3AF' }}>CTR {video.ctr.toFixed(1)}%</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Heatmap Tab - 投稿最適時間 */}
+          {activeTab === 'heatmap' && (
+            <>
+              {/* 曜日×四半期ヒートマップ */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>🔥 投稿最適時間マップ</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>曜日×季節別の平均視聴回数ヒートマップ（赤いほど高パフォーマンス）</Text>
+                {/* ヘッダー行 */}
+                <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                  <View style={{ width: 24 }} />
+                  {heatmapData.periods.map((p, i) => (
+                    <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 9, color: '#9CA3AF', fontWeight: '600' }}>{p}</Text>
+                    </View>
+                  ))}
+                </View>
+                {/* 曜日行 */}
+                {heatmapData.days.map((day, di) => {
+                  const rowCells = heatmapData.matrix.filter(m => m.day === day);
+                  const maxViews = Math.max(...heatmapData.matrix.map(m => m.avgViews));
+                  return (
+                    <View key={di} style={{ flexDirection: 'row', marginBottom: 4, alignItems: 'center' }}>
+                      <View style={{ width: 24, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 11, color: '#606060', fontWeight: '600' }}>{day}</Text>
+                      </View>
+                      {rowCells.map((cell, ci) => (
+                        <View key={ci} style={{ flex: 1, margin: 2 }}>
+                          <View style={{
+                            height: 36,
+                            backgroundColor: cell.avgViews === 0 ? '#F3F4F6'
+                              : cell.avgViews / maxViews < 0.2 ? '#FEE2E2'
+                              : cell.avgViews / maxViews < 0.4 ? '#FCA5A5'
+                              : cell.avgViews / maxViews < 0.6 ? '#F87171'
+                              : cell.avgViews / maxViews < 0.8 ? '#EF4444'
+                              : '#DC2626',
+                            borderRadius: 6,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            <Text style={{ fontSize: 9, color: cell.avgViews / maxViews > 0.5 ? 'white' : '#374151', fontWeight: '700' }}>
+                              {cell.count > 0 ? formatNumber(cell.avgViews) : '-'}
+                            </Text>
+                            {cell.count > 0 && (
+                              <Text style={{ fontSize: 8, color: cell.avgViews / maxViews > 0.5 ? 'rgba(255,255,255,0.8)' : '#9CA3AF' }}>
+                                {cell.count}本
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
+                {/* 凡例 */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 10, color: '#9CA3AF' }}>低</Text>
+                  {['#FEE2E2', '#FCA5A5', '#F87171', '#EF4444', '#DC2626'].map((c, i) => (
+                    <View key={i} style={{ width: 20, height: 12, backgroundColor: c, borderRadius: 3 }} />
+                  ))}
+                  <Text style={{ fontSize: 10, color: '#9CA3AF' }}>高</Text>
+                </View>
+              </View>
+
+              {/* 曜日別詳細スタッツ */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>曜日別パフォーマンス詳細</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>投稿数・平均視聴回数・平均CTR・平均収益</Text>
+                {(() => {
+                  const maxViews = Math.max(...dayDetailedStats.map(d => d.avgViews));
+                  const bestDay = dayDetailedStats.reduce((best, d) => d.avgViews > best.avgViews ? d : best, dayDetailedStats[0]);
+                  return (
+                    <View>
+                      {/* ヘッダー */}
+                      <View style={{ flexDirection: 'row', paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', marginBottom: 8 }}>
+                        <Text style={{ width: 36, fontSize: 10, color: '#9CA3AF', fontWeight: '600' }}>曜日</Text>
+                        <Text style={{ flex: 1, fontSize: 10, color: '#9CA3AF', fontWeight: '600', textAlign: 'center' }}>投稿数</Text>
+                        <Text style={{ flex: 2, fontSize: 10, color: '#9CA3AF', fontWeight: '600', textAlign: 'right' }}>平均視聴回数</Text>
+                        <Text style={{ flex: 1, fontSize: 10, color: '#9CA3AF', fontWeight: '600', textAlign: 'right' }}>CTR</Text>
+                      </View>
+                      {dayDetailedStats.map((d, i) => (
+                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: i < 6 ? 0.5 : 0, borderBottomColor: '#F8F8F8' }}>
+                          <View style={{ width: 36, height: 28, borderRadius: 8, backgroundColor: d.day === bestDay.day ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: d.day === bestDay.day ? 'white' : '#606060' }}>{d.day}</Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 12, color: '#606060', textAlign: 'center' }}>{d.count}</Text>
+                          <View style={{ flex: 2, alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: d.day === bestDay.day ? '#FF0000' : '#0F0F0F' }}>{formatNumber(d.avgViews)}</Text>
+                            <View style={{ height: 4, width: 60, backgroundColor: '#F3F4F6', borderRadius: 2, marginTop: 2 }}>
+                              <View style={{ height: 4, width: maxViews > 0 ? `${(d.avgViews / maxViews) * 100}%` as any : '0%', backgroundColor: d.day === bestDay.day ? '#FF0000' : '#FF000060', borderRadius: 2 }} />
+                            </View>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 12, fontWeight: '600', color: '#8B5CF6', textAlign: 'right' }}>{d.avgCtr.toFixed(1)}%</Text>
+                        </View>
+                      ))}
+                      <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFF5F5', borderRadius: 10 }}>
+                        <Text style={{ fontSize: 12, color: '#FF0000', fontWeight: '700' }}>🏆 最適投稿曜日: {bestDay.day}曜日</Text>
+                        <Text style={{ fontSize: 11, color: '#606060', marginTop: 4 }}>
+                          平均視聴回数 {formatNumber(bestDay.avgViews)}回 / 平均CTR {bestDay.avgCtr.toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {/* 月別パフォーマンス */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>月別 平均視聴回数ランキング</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>どの月に投稿した動画が最も伸びているか</Text>
+                <HorizontalBarChart
+                  data={monthlyPatternStats.filter(m => m.count > 0).sort((a, b) => b.avgViews - a.avgViews).map(m => ({ label: m.label, value: m.avgViews }))}
+                  color="#FF0000"
+                  valueFormat={formatNumber}
+                />
+              </View>
+            </>
+          )}
+
+          {/* Calendar Tab - 連続投稿カレンダー */}
+          {activeTab === 'calendar' && (
+            <>
+              {/* サマリーカード */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>🌿 投稿記録（直近12ヶ月）</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#F0FDF4', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#16A34A' }}>投稿日数</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#16A34A' }}>{calendarData.totalPostDays}日</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#2563EB' }}>総投稿本数</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#2563EB' }}>{calendarData.totalPosts}本</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FFF7ED', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#EA580C' }}>最長連続投稿</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#EA580C' }}>{calendarData.maxStreak}日</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FDF4FF', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#9333EA' }}>現在の連続</Text>
+                    <Text style={{ fontSize: 22, fontWeight: '800', color: '#9333EA' }}>{calendarData.todayStreak}日</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* GitHubスタイルカレンダー */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 4 }}>投稿カレンダー</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 12 }}>緑が濃いほど多く投稿した日</Text>
+                {/* 曜日ラベル */}
+                <View style={{ flexDirection: 'row', marginBottom: 4, paddingLeft: 2 }}>
+                  {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
+                    <Text key={i} style={{ width: 13, fontSize: 8, color: '#9CA3AF', textAlign: 'center' }}>{i % 2 === 0 ? d : ''}</Text>
+                  ))}
+                </View>
+                {/* カレンダーグリッド（横スクロール） */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 2 }}>
+                    {calendarData.weeks.map((week, wi) => (
+                      <View key={wi} style={{ flexDirection: 'column', gap: 2 }}>
+                        {week.map((day, di) => (
+                          <CalendarCell key={di} count={day.count} date={day.date} />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+                {/* 凡例 */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, justifyContent: 'flex-end' }}>
+                  <Text style={{ fontSize: 10, color: '#9CA3AF' }}>少</Text>
+                  {['#EBEDF0', '#9BE9A8', '#40C463', '#216E39'].map((c, i) => (
+                    <View key={i} style={{ width: 12, height: 12, backgroundColor: c, borderRadius: 2 }} />
+                  ))}
+                  <Text style={{ fontSize: 10, color: '#9CA3AF' }}>多</Text>
+                </View>
+              </View>
+
+              {/* 達成バッジ */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>🏅 達成バッジ</Text>
+                <View style={{ gap: 10 }}>
+                  {[
+                    { label: '初投稿', desc: '最初の動画を投稿', achieved: calendarData.totalPosts >= 1, icon: '🎬' },
+                    { label: '10本達成', desc: '10本の動画を投稿', achieved: calendarData.totalPosts >= 10, icon: '🔟' },
+                    { label: '50本達成', desc: '50本の動画を投稿', achieved: calendarData.totalPosts >= 50, icon: '🥈' },
+                    { label: '100本達成', desc: '100本の動画を投稿', achieved: calendarData.totalPosts >= 100, icon: '💯' },
+                    { label: '3日連続', desc: '3日連続で投稿', achieved: calendarData.maxStreak >= 3, icon: '🔥' },
+                    { label: '7日連続', desc: '7日連続で投稿', achieved: calendarData.maxStreak >= 7, icon: '⚡' },
+                    { label: '月30本', desc: '1ヶ月に30本以上投稿', achieved: calendarData.totalPostDays >= 30, icon: '📅' },
+                  ].map((badge, i) => (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: i < 6 ? 0.5 : 0, borderBottomColor: '#F0F0F0' }}>
+                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: badge.achieved ? '#F0FDF4' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 20, opacity: badge.achieved ? 1 : 0.3 }}>{badge.icon}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: badge.achieved ? '#0F0F0F' : '#9CA3AF' }}>{badge.label}</Text>
+                        <Text style={{ fontSize: 11, color: '#9CA3AF' }}>{badge.desc}</Text>
+                      </View>
+                      {badge.achieved && (
+                        <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#16A34A', fontWeight: '700' }}>達成</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* Simulator Tab - 収益シミュレーター */}
+          {activeTab === 'simulator' && (
+            <>
+              {/* 現状サマリー */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>🔮 収益予測・シミュレーター</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>直近3ヶ月の実績をもとに来月を予測</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#F0FDF4', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#16A34A' }}>来月予測収益</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#16A34A' }}>¥{formatNumber(simulatorData.predictedRevenue)}</Text>
+                    <Text style={{ fontSize: 9, color: '#9CA3AF', marginTop: 2 }}>3ヶ月平均ベース</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#2563EB' }}>来月予測視聴回数</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#2563EB' }}>{formatNumber(simulatorData.predictedViews)}</Text>
+                    <Text style={{ fontSize: 9, color: '#9CA3AF', marginTop: 2 }}>3ヶ月平均ベース</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FFF7ED', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#EA580C' }}>平均CPM</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#EA580C' }}>¥{formatNumber(simulatorData.avgCpm)}</Text>
+                    <Text style={{ fontSize: 9, color: '#9CA3AF', marginTop: 2 }}>1000回あたり</Text>
+                  </View>
+                  <View style={{ flex: 1, padding: 12, backgroundColor: '#FDF4FF', borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#9333EA' }}>月平均投稿数</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#9333EA' }}>{simulatorData.avgMonthlyVideos}本</Text>
+                    <Text style={{ fontSize: 9, color: '#9CA3AF', marginTop: 2 }}>直近3ヶ月平均</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* 収益トレンドグラフ */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>月別収益トレンド（直近12ヶ月）</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>収益の推移と月ごとのCPM</Text>
+                {simulatorData.revenueTrend.filter(m => m.revenue > 0).length > 0 ? (
+                  <VerticalBarChart
+                    data={simulatorData.revenueTrend.filter(m => m.revenue > 0).map(m => ({ label: m.label, value: m.revenue }))}
+                    color="#22C55E"
+                  />
+                ) : (
+                  <Text style={{ color: '#9CA3AF', textAlign: 'center', paddingVertical: 20 }}>収益データがありません</Text>
+                )}
+                {/* CPMテーブル */}
+                <View style={{ marginTop: 16 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 8 }}>月別CPM推移</Text>
+                  {simulatorData.revenueTrend.filter(m => m.cpm > 0).slice(-6).map((m, i) => (
+                    <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' }}>
+                      <Text style={{ fontSize: 12, color: '#606060' }}>{m.label}</Text>
+                      <View style={{ flexDirection: 'row', gap: 16 }}>
+                        <Text style={{ fontSize: 12, color: '#9CA3AF' }}>{formatNumber(m.views)}回</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#22C55E' }}>¥{formatNumber(m.cpm)}/千回</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* インタラクティブシミュレーター */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>仮説シミュレーション</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>条件を変えて来月の収益を予測</Text>
+
+                {/* ショート追加スライダー */}
+                <View style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#0F0F0F' }}>⚡ ショート追加本数（週）</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#3B82F6' }}>{simVideosPerWeek}本</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[0, 1, 2, 3, 5].map(n => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setSimVideosPerWeek(n)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          backgroundColor: simVideosPerWeek === n ? '#3B82F6' : '#F3F4F6',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: simVideosPerWeek === n ? 'white' : '#606060' }}>{n}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* CTR改善スライダー */}
+                <View style={{ marginBottom: 20 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#0F0F0F' }}>🎯 CTR改善（+%）</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#8B5CF6' }}>+{simCtrBoost}%</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[0, 0.5, 1, 2, 3].map(n => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setSimCtrBoost(n)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          backgroundColor: simCtrBoost === n ? '#8B5CF6' : '#F3F4F6',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: simCtrBoost === n ? 'white' : '#606060' }}>+{n}%</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* 予測結果 */}
+                <View style={{ padding: 16, backgroundColor: '#F0FDF4', borderRadius: 12, borderWidth: 2, borderColor: '#22C55E' }}>
+                  <Text style={{ fontSize: 12, color: '#16A34A', fontWeight: '600', marginBottom: 4 }}>📊 シミュレーション結果</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                    <Text style={{ fontSize: 28, fontWeight: '900', color: '#16A34A' }}>¥{formatNumber(simulatedRevenue)}</Text>
+                    {simulatedRevenue > simulatorData.predictedRevenue && (
+                      <Text style={{ fontSize: 13, color: '#16A34A', fontWeight: '700' }}>
+                        (+¥{formatNumber(simulatedRevenue - simulatorData.predictedRevenue)})
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                    ベース予測: ¥{formatNumber(simulatorData.predictedRevenue)} → 変化: {simulatedRevenue > simulatorData.predictedRevenue ? '+' : ''}{(((simulatedRevenue - simulatorData.predictedRevenue) / (simulatorData.predictedRevenue || 1)) * 100).toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
+
+              {/* 改善シナリオ一覧 */}
+              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>💡 改善シナリオ比較</Text>
+                {simulatorData.simulations.map((sim, i) => (
+                  <View key={i} style={{ paddingVertical: 12, borderBottomWidth: i < simulatorData.simulations.length - 1 ? 0.5 : 0, borderBottomColor: '#F0F0F0' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F', marginBottom: 2 }}>{sim.label}</Text>
+                    <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8 }}>{sim.description}</Text>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1, padding: 8, backgroundColor: '#F0FDF4', borderRadius: 8 }}>
+                        <Text style={{ fontSize: 9, color: '#16A34A' }}>追加収益</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#16A34A' }}>+¥{formatNumber(sim.estimatedAdditionalRevenue)}</Text>
+                      </View>
+                      <View style={{ flex: 1, padding: 8, backgroundColor: '#EFF6FF', borderRadius: 8 }}>
+                        <Text style={{ fontSize: 9, color: '#2563EB' }}>追加視聴回数</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>+{formatNumber(sim.estimatedAdditionalViews)}</Text>
                       </View>
                     </View>
                   </View>
