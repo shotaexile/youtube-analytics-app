@@ -1555,4 +1555,5 @@ app.use(
   })
 );
 var index_default = app;
-module.exports = app;
+// Vercel Serverless Function requires a handler function, not an Express app instance directly
+module.exports = (req, res) => app(req, res);
