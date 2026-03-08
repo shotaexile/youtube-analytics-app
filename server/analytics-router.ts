@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { invokeLLM } from "./_core/llm";
-import { callDataApi } from "./_core/dataApi";
+import { callOpenAI } from "./_core/openai";
+import { searchYouTube } from "./_core/youtube";
 import {
   videos,
   monthlyStats,
@@ -562,15 +562,15 @@ ${top10.join('\n')}
 【最新5本の動画】
 ${recent5.join('\n')}`;
 
-      const response = await invokeLLM({
+      const response = await callOpenAI({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: input.question },
         ],
+        maxTokens: 1500,
       });
 
-      const rawContent = response.choices?.[0]?.message?.content;
-      const answer = typeof rawContent === 'string' ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '回答を生成できませんでした。');
+      const answer = response.choices?.[0]?.message?.content ?? '回答を生成できませんでした。';
       return { answer };
     }),
 
@@ -596,24 +596,8 @@ ${recent5.join('\n')}`;
 
       for (const cat of targetCategories) {
         try {
-          const searchResult = await callDataApi('Youtube/search', {
-            query: { q: cat.query, hl: 'ja', gl: 'JP' },
-          }) as any;
-
-          const videos = (searchResult?.contents || [])
-            .filter((item: any) => item.type === 'video')
-            .slice(0, 5)
-            .map((item: any) => ({
-              videoId: item.video?.videoId || '',
-              title: item.video?.title || '',
-              channel: item.video?.channelTitle || '',
-              views: item.video?.viewCountText || '',
-              publishedAt: item.video?.publishedTimeText || '',
-              thumbnail: item.video?.thumbnails?.[0]?.url || '',
-              description: item.video?.descriptionSnippet || '',
-            }));
-
-          results.push({ category: cat.label, videos });
+          const items = await searchYouTube(cat.query, 5);
+          results.push({ category: cat.label, videos: items });
         } catch (e) {
           results.push({ category: cat.label, videos: [] });
         }
@@ -705,17 +689,16 @@ ${trendContext}
   ]
 }`;
 
-      const response = await invokeLLM({
+      const response = await callOpenAI({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: 'トレンドを分析して、バズる企画を3本提案してください。' },
         ],
         maxTokens: 2000,
+        model: 'gpt-4o',
       });
 
-      const rawContent = response.choices?.[0]?.message?.content;
-      const text = typeof rawContent === 'string' ? rawContent
-        : Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '';
+      const text = response.choices?.[0]?.message?.content ?? '';
 
       // JSONを抽出してパース
       try {
@@ -733,22 +716,7 @@ ${trendContext}
     .input(z.object({ keyword: z.string() }))
     .query(async ({ input }) => {
       try {
-        const result = await callDataApi('Youtube/search', {
-          query: { q: input.keyword + ' 日本', hl: 'ja', gl: 'JP' },
-        }) as any;
-
-        const items = (result?.contents || [])
-          .filter((item: any) => item.type === 'video')
-          .slice(0, 10)
-          .map((item: any) => ({
-            videoId: item.video?.videoId || '',
-            title: item.video?.title || '',
-            channel: item.video?.channelTitle || '',
-            views: item.video?.viewCountText || '',
-            publishedAt: item.video?.publishedTimeText || '',
-            thumbnail: item.video?.thumbnails?.[0]?.url || '',
-          }));
-
+        const items = await searchYouTube(input.keyword + ' 日本', 10);
         return { videos: items };
       } catch (e) {
         return { videos: [] };

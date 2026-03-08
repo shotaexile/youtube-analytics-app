@@ -165,3 +165,13 @@
 
 ## 修正タスク Round 19（ユーザー指示）
 - [x] SafariでPWA（ホーム画面追加）として使用した際の表示ずれを修正（viewport-fit=cover + CSS env(safe-area-inset-*)でExpo Goと同じ表示に対応）
+
+## 修正タスク Round 20（ユーザー指示）
+- [x] AI分析タブとトレンド企画提案タブが読み込めない問題を修正
+
+## 修正タスク Round 21（ユーザー指示）
+- [x] CSVファイルアップロードで「Load failed」エラーが発生する問題を修正
+
+## 修正タスク Round 22（ユーザー指示）
+- [x] VercelでバックエンドAPIをServerless Functionsとして動かし24時間稼働させる
+- [x] CSVアップロード・AI分析・トレンド機能をVercelで動作させる
