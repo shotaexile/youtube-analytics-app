@@ -177,4 +177,4 @@
 - [x] CSVアップロード・AI分析・トレンド機能をVercelで動作させる
 
 ## 修正タスク Round 23（ユーザー指示）
-- [ ] Vercelビルドエラー（pnpm build:web exit code 1）を根本から修正して確実にデプロイを成功させる
+- [x] Vercelビルドエラー（pnpm build:web exit code 1）を根本から修正して確実にデプロイを成功させる
