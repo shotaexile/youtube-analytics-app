@@ -43,4 +43,7 @@ app.use(
   }),
 );
 
+// Vercel Serverless Function: export app directly
+// module.exports = app allows Vercel to use Express as a serverless handler
 export default app;
+module.exports = app;

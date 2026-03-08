@@ -55,16 +55,29 @@ if (bundles.length === 0) {
 for (const bundle of bundles) {
   const bundlePath = path.join(jsDir, bundle);
   let content = fs.readFileSync(bundlePath, "utf8");
+
   // Replace any path containing MaterialIcons*.ttf with /fonts/MaterialIcons.ttf
-  const patched = content.replace(
+  let patched = content.replace(
     /"[^"]*MaterialIcons[^"]*\.ttf"/g,
     '"/fonts/MaterialIcons.ttf"'
   );
   if (patched !== content) {
-    fs.writeFileSync(bundlePath, patched, "utf8");
     console.log(`✅ Patched font path in ${bundle}`);
   } else {
     console.log(`ℹ️  No font path found in ${bundle} (may already be patched)`);
+  }
+
+  // Replace Manus sandbox API base URL with empty string for Vercel production
+  // This ensures the frontend uses relative URLs (/api/trpc/...) on Vercel
+  const manusUrlPattern = /https:\/\/3000-[a-z0-9]+-[0-9]+\.sg[0-9]+\.manus\.computer/g;
+  const patchedNoManus = patched.replace(manusUrlPattern, "");
+  if (patchedNoManus !== patched) {
+    console.log(`✅ Removed Manus sandbox API URL from ${bundle} (Vercel production fix)`);
+    patched = patchedNoManus;
+  }
+
+  if (patched !== content) {
+    fs.writeFileSync(bundlePath, patched, "utf8");
   }
 }
 

@@ -178,3 +178,10 @@
 
 ## 修正タスク Round 23（ユーザー指示）
 - [x] Vercelビルドエラー（pnpm build:web exit code 1）を根本から修正して確実にデプロイを成功させる
+
+## 最重要修正タスク Round 24（ユーザー指示）
+- [x] 企画提案・AI Bot機能をVercelで24時間確実に動作させる（Serverless Functions + OpenAI + YouTube API）
+  - [x] apiBaseUrlハードコード問題修正（Manus URLをdistバンドルから除去）
+  - [x] vercel.json rewrites/routes競合を解消（routesのみに統一）
+  - [x] api/index.jsをmodule.exports = app形式に修正
+  - [x] post-build-fix.mjsにManus URL自動除去処理を追加

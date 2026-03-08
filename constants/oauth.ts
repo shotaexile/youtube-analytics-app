@@ -28,21 +28,28 @@ export const API_BASE_URL = env.apiBaseUrl;
  * Get the API base URL, deriving from current hostname if not set.
  * Metro runs on 8081, API server runs on 3000.
  * URL pattern: https://PORT-sandboxid.region.domain
+ *
+ * For Vercel/production: returns empty string so relative URLs are used (/api/trpc/...)
+ * For Manus sandbox dev: transforms 8081-xxx to 3000-xxx
  */
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
+  // If API_BASE_URL is explicitly set, use it
   if (API_BASE_URL) {
     return API_BASE_URL.replace(/\/$/, "");
   }
 
   // On web, derive from current hostname by replacing port 8081 with 3000
+  // This only applies to Manus sandbox development environment
   if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
     const { protocol, hostname } = window.location;
     // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain
+    // Only apply this transformation for Manus sandbox URLs
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
       return `${protocol}//${apiHostname}`;
     }
+    // For Vercel/production: use empty string (relative URL /api/trpc/...)
+    return "";
   }
 
   // Fallback to empty (will use relative URL)
