@@ -275,8 +275,8 @@ function EarlyStatsInputModal({
             iconColor="#F59E0B"
             hint="YouTube Studioに表示されている%の数値をそのまま入力"
           />
-          {/* 24時間の場合は平均視聴率を非表示 */}
-          {activeWindow !== "24h" && (
+          {/* 1時間の場合は平均視聴率を非表示 */}
+          {activeWindow !== "1h" && (
             <InputField
               label="平均視聴率 %"
               value={currentForm.avgViewRate}
