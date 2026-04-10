@@ -549,27 +549,27 @@ export default function EarlyStatsScreen() {
 
       {activeTab === "ranking" ? (
         <>
-          {/* Time window filter */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-            <View style={{ flexDirection: "row", paddingHorizontal: 16, gap: 8 }}>
-              {TIME_WINDOWS.map(tw => (
-                <TouchableOpacity
-                  key={tw.key}
-                  onPress={() => setSelectedTimeWindow(tw.key)}
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 6,
-                    borderRadius: 20,
-                    backgroundColor: selectedTimeWindow === tw.key ? "#FF0000" : "#F3F4F6",
-                  }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: "600", color: selectedTimeWindow === tw.key ? "#fff" : "#606060" }}>
-                    {tw.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+          {/* Time window filter - 横並び均等配置 */}
+          <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 8, gap: 6 }}>
+            {TIME_WINDOWS.map(tw => (
+              <TouchableOpacity
+                key={tw.key}
+                onPress={() => setSelectedTimeWindow(tw.key)}
+                style={{
+                  flex: 1,
+                  paddingHorizontal: 4,
+                  paddingVertical: 7,
+                  borderRadius: 12,
+                  backgroundColor: selectedTimeWindow === tw.key ? "#FF0000" : "#F3F4F6",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "600", color: selectedTimeWindow === tw.key ? "#fff" : "#606060" }} numberOfLines={1}>
+                  {tw.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {/* Sort metric filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
