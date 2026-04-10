@@ -10,6 +10,7 @@ import {
   csvUploads,
   adminSettings,
   pushTokens,
+  videoEarlyStats,
   type InsertVideo,
   type InsertMonthlyStats,
 } from "../drizzle/schema";
@@ -741,6 +742,106 @@ ${trendContext}
       } catch (e) {
         return { videos: [] };
       }
+    }),
+
+  // ── 初速データ（Early Stats）API ────────────────────────────────────────────
+
+  // 初速データを保存・更新
+  saveEarlyStats: publicProcedure
+    .input(z.object({
+      videoId: z.string(),
+      timeWindow: z.enum(["1h", "24h", "48h", "1week"]),
+      views: z.number().min(0),
+      impressions: z.number().min(0),
+      ctr: z.number().min(0),
+      avgViewRate: z.number().min(0),
+      likeRate: z.number().min(0),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db
+        .insert(videoEarlyStats)
+        .values({
+          videoId: input.videoId,
+          timeWindow: input.timeWindow,
+          views: input.views,
+          impressions: input.impressions,
+          ctr: input.ctr,
+          avgViewRate: input.avgViewRate,
+          likeRate: input.likeRate,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            views: input.views,
+            impressions: input.impressions,
+            ctr: input.ctr,
+            avgViewRate: input.avgViewRate,
+            likeRate: input.likeRate,
+          },
+        });
+      return { success: true };
+    }),
+
+  // 特定動画の初速データを取得
+  getEarlyStats: publicProcedure
+    .input(z.object({ videoId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(videoEarlyStats)
+        .where(eq(videoEarlyStats.videoId, input.videoId))
+        .orderBy(asc(videoEarlyStats.timeWindow));
+      return rows;
+    }),
+
+  // 全動画の初速データ一覧（ランキング用）
+  getAllEarlyStats: publicProcedure
+    .input(z.object({
+      timeWindow: z.enum(["1h", "24h", "48h", "1week"]).optional(),
+      sortBy: z.enum(["views", "impressions", "ctr", "avgViewRate", "likeRate"]).optional(),
+      limit: z.number().min(1).max(200).optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const tw = input.timeWindow ?? "24h";
+      const limit = input.limit ?? 50;
+      // Join with videos to get title and publishedDate
+      const rows = await db
+        .select({
+          id: videoEarlyStats.id,
+          videoId: videoEarlyStats.videoId,
+          timeWindow: videoEarlyStats.timeWindow,
+          views: videoEarlyStats.views,
+          impressions: videoEarlyStats.impressions,
+          ctr: videoEarlyStats.ctr,
+          avgViewRate: videoEarlyStats.avgViewRate,
+          likeRate: videoEarlyStats.likeRate,
+          recordedAt: videoEarlyStats.recordedAt,
+          title: videos.title,
+          publishedAt: videos.publishedAt,
+          isShort: videos.isShort,
+          finalViews: videos.views,
+        })
+        .from(videoEarlyStats)
+        .leftJoin(videos, eq(videoEarlyStats.videoId, videos.videoId))
+        .where(eq(videoEarlyStats.timeWindow, tw))
+        .orderBy(desc(videoEarlyStats.views))
+        .limit(limit);
+      return rows;
+    }),
+
+  // 初速データを削除
+  deleteEarlyStats: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db.delete(videoEarlyStats).where(eq(videoEarlyStats.id, input.id));
+      return { success: true };
     }),
 
   // DBのavgViewRateとlikeRateを入れ替える修正エンドポイント

@@ -99,6 +99,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={22} name="lightbulb.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="early-stats"
+        options={{
+          title: "初速",
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="clock.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

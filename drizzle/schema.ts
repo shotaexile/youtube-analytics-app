@@ -126,3 +126,22 @@ export const pushTokens = mysqlTable("push_tokens", {
 });
 export type PushToken = typeof pushTokens.$inferSelect;
 export type InsertPushToken = typeof pushTokens.$inferInsert;
+
+/**
+ * Early stats (initial velocity data) per video per time window
+ * Tracks views, impressions, CTR, avgViewRate, likeRate at 1h/24h/48h/1week after publish
+ */
+export const videoEarlyStats = mysqlTable("video_early_stats", {
+  id: int("id").autoincrement().primaryKey(),
+  videoId: varchar("videoId", { length: 64 }).notNull(),
+  timeWindow: mysqlEnum("timeWindow", ["1h", "24h", "48h", "1week"]).notNull(),
+  views: bigint("views", { mode: "number" }).notNull().default(0),
+  impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
+  ctr: float("ctr").notNull().default(0),
+  avgViewRate: float("avgViewRate").notNull().default(0),
+  likeRate: float("likeRate").notNull().default(0),
+  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type VideoEarlyStatsRow = typeof videoEarlyStats.$inferSelect;
+export type InsertVideoEarlyStats = typeof videoEarlyStats.$inferInsert;
