@@ -185,3 +185,6 @@
   - [x] vercel.json rewrites/routes競合を解消（routesのみに統一）
   - [x] api/index.jsをmodule.exports = app形式に修正
   - [x] post-build-fix.mjsにManus URL自動除去処理を追加
+
+## バグ修正 Round 25（ユーザー報告）
+- [x] 平均視聴率と高評価率の数値が入れ替わっているバグを修正する（CSVパーサーをヘッダー名から動的に列を特定するよう修正、DBの695本のデータを修正）
