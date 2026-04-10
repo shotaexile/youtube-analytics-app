@@ -12,12 +12,14 @@ import {
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { trpc } from "@/lib/trpc";
 import { useVideos } from "@/lib/data/use-analytics";
 import { formatNumber } from "@/lib/data/csv-parser";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Colors } from "@/constants/theme";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,7 @@ interface InputFormState {
   ctr: string;
   avgViewRate: string;
   likeRate: string;
+  avgWatchTime?: string; // 削除対象フィールド（24時間のみ）
 }
 
 const EMPTY_FORM: InputFormState = {
@@ -88,13 +91,17 @@ function EarlyStatsInputModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [activeWindow, setActiveWindow] = useState<TimeWindow>("24h");
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme];
+  const [activeWindow, setActiveWindow] = useState<TimeWindow>("1h");
   const [forms, setForms] = useState<Record<TimeWindow, InputFormState>>({
     "1h": EMPTY_FORM,
     "24h": EMPTY_FORM,
     "48h": EMPTY_FORM,
     "1week": EMPTY_FORM,
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const autoSaveTimerRef = useRef<number | null>(null);
 
   // Pre-fill existing data when modal opens
   const initForms = useCallback(() => {
@@ -118,38 +125,55 @@ function EarlyStatsInputModal({
 
   const saveMutation = trpc.analytics.saveEarlyStats.useMutation();
 
-  const handleSave = async () => {
-    const form = forms[activeWindow];
-    const views = parseInt(form.views) || 0;
-    const impressions = parseInt(form.impressions) || 0;
-    const ctr = parseFloat(form.ctr) || 0;
-    const avgViewRate = parseFloat(form.avgViewRate) || 0;
-    const likeRate = parseFloat(form.likeRate) || 0;
-
-    if (views === 0 && impressions === 0) {
-      Alert.alert("入力エラー", "視聴回数またはインプレッション数を入力してください");
-      return;
+  // オートセーブ機能：フォーム変更後3秒後に自動保存
+  const triggerAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current !== null) {
+      clearTimeout(autoSaveTimerRef.current);
     }
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const allWindows: TimeWindow[] = ["1h", "24h", "48h", "1week"];
+      for (const window of allWindows) {
+        const form = forms[window];
+        const views = parseInt(form.views) || 0;
+        const impressions = parseInt(form.impressions) || 0;
+        const ctr = parseFloat(form.ctr) || 0;
+        const avgViewRate = parseFloat(form.avgViewRate) || 0;
+        const likeRate = parseFloat(form.likeRate) || 0;
 
-    try {
-      await saveMutation.mutateAsync({
-        videoId,
-        timeWindow: activeWindow,
-        views,
-        impressions,
-        ctr,
-        avgViewRate,
-        likeRate,
-      });
-      Alert.alert("保存完了", `${TIME_WINDOWS.find(t => t.key === activeWindow)?.label}の初速データを保存しました`);
+        if (views > 0 || impressions > 0) {
+          try {
+            await saveMutation.mutateAsync({
+              videoId,
+              timeWindow: window,
+              views,
+              impressions,
+              ctr,
+              avgViewRate,
+              likeRate,
+            });
+          } catch (e) {
+            console.error(`Failed to autosave ${window}:`, e);
+          }
+        }
+      }
+      setIsSaving(false);
       onSaved();
-    } catch (e) {
-      Alert.alert("エラー", "保存に失敗しました");
-    }
-  };
+    }, 3000);
+  }, [forms, videoId, saveMutation, onSaved]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current !== null) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   const updateField = (window: TimeWindow, field: keyof InputFormState, value: string) => {
     setForms(prev => ({ ...prev, [window]: { ...prev[window], [field]: value } }));
+    setIsSaving(true);
+    triggerAutoSave();
   };
 
   const currentForm = forms[activeWindow];
@@ -158,38 +182,36 @@ function EarlyStatsInputModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onShow={initForms}>
       <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: "#fff" }}
+        style={{ flex: 1, backgroundColor: colors.background }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {/* Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, paddingTop: 20, borderBottomWidth: 0.5, borderBottomColor: "#E5E7EB" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, paddingTop: 20, borderBottomWidth: 0.5, borderBottomColor: colors.border }}
+        >
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
-            <IconSymbol name="xmark" size={20} color="#606060" />
+            <IconSymbol name="xmark" size={20} color={colors.muted} />
           </TouchableOpacity>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#0F0F0F", flex: 1, textAlign: "center", marginHorizontal: 8 }} numberOfLines={1}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, flex: 1, textAlign: "center", marginHorizontal: 8 }} numberOfLines={1}>
             初速データ入力
           </Text>
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={saveMutation.isPending}
-            style={{ backgroundColor: "#FF0000", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
-          >
-            {saveMutation.isPending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>保存</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {isSaving && (
+              <ActivityIndicator size="small" color={colors.primary} />
             )}
-          </TouchableOpacity>
+            <Text style={{ fontSize: 12, color: colors.muted, fontWeight: "500" }}>
+              {isSaving ? "保存中..." : "自動保存"}
+            </Text>
+          </View>
         </View>
 
         {/* Video title */}
-        <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#F9FAFB" }}>
-          <Text style={{ fontSize: 13, color: "#606060" }} numberOfLines={2}>{videoTitle}</Text>
+        <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.surface }}>
+          <Text style={{ fontSize: 13, color: colors.muted }} numberOfLines={2}>{videoTitle}</Text>
         </View>
 
-        {/* Time window selector */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ borderBottomWidth: 0.5, borderBottomColor: "#E5E7EB" }}>
-          <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+        {/* Time window selector - 横並びで固定幅 */}
+        <View style={{ borderBottomWidth: 0.5, borderBottomColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }}>
+          <View style={{ flexDirection: "row", gap: 6, justifyContent: "space-between" }}>
             {TIME_WINDOWS.map(tw => {
               const isActive = activeWindow === tw.key;
               const hasData = existingStats.some(s => s.timeWindow === tw.key);
@@ -198,28 +220,30 @@ function EarlyStatsInputModal({
                   key={tw.key}
                   onPress={() => setActiveWindow(tw.key)}
                   style={{
-                    paddingHorizontal: 16,
+                    flex: 1,
+                    paddingHorizontal: 8,
                     paddingVertical: 8,
-                    borderRadius: 20,
-                    backgroundColor: isActive ? "#FF0000" : "#F3F4F6",
+                    borderRadius: 12,
+                    backgroundColor: isActive ? "#FF0000" : colors.surface,
                     borderWidth: hasData && !isActive ? 1.5 : 0,
                     borderColor: "#22C55E",
+                    alignItems: "center",
                   }}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: isActive ? "#fff" : hasData ? "#22C55E" : "#606060" }}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: isActive ? "#fff" : hasData ? "#22C55E" : colors.muted }} numberOfLines={1}>
                     {tw.label}{hasData && !isActive ? " ✓" : ""}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-        </ScrollView>
+        </View>
 
         {/* Form */}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
           {hasExisting && (
-            <View style={{ backgroundColor: "#F0FDF4", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#BBF7D0" }}>
-              <Text style={{ fontSize: 12, color: "#16A34A" }}>✓ このタイムウィンドウのデータは保存済みです。上書きされます。</Text>
+            <View style={{ backgroundColor: colors.success + "20", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.success }}>
+              <Text style={{ fontSize: 12, color: colors.success }}>✓ このタイムウィンドウのデータは保存済みです。上書きされます。</Text>
             </View>
           )}
 
@@ -251,16 +275,20 @@ function EarlyStatsInputModal({
             iconColor="#F59E0B"
             hint="YouTube Studioに表示されている%の数値をそのまま入力"
           />
-          <InputField
-            label="平均視聴率 %"
-            value={currentForm.avgViewRate}
-            onChangeText={v => updateField(activeWindow, "avgViewRate", v)}
-            placeholder="例: 42.3"
-            keyboardType="decimal-pad"
-            icon="chart.line.uptrend.xyaxis"
-            iconColor="#22C55E"
-            hint="YouTube Studioに表示されている%の数値をそのまま入力"
-          />
+          {/* 24時間の場合は平均視聴率を非表示 */}
+          {activeWindow !== "24h" && (
+            <InputField
+              label="平均視聴率 %"
+              value={currentForm.avgViewRate}
+              onChangeText={v => updateField(activeWindow, "avgViewRate", v)}
+              placeholder="例: 42.3"
+              keyboardType="decimal-pad"
+              icon="chart.line.uptrend.xyaxis"
+              iconColor="#22C55E"
+              hint="YouTube Studioに表示されている%の数値をそのまま入力"
+              colors={colors}
+            />
+          )}
           <InputField
             label="高評価率 %"
             value={currentForm.likeRate}
@@ -270,6 +298,7 @@ function EarlyStatsInputModal({
             icon="hand.thumbsup.fill"
             iconColor="#EF4444"
             hint="高評価 ÷ (高評価 + 低評価) × 100"
+            colors={colors}
           />
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -287,6 +316,7 @@ function InputField({
   icon,
   iconColor,
   hint,
+  colors,
 }: {
   label: string;
   value: string;
@@ -296,12 +326,16 @@ function InputField({
   icon: any;
   iconColor: string;
   hint?: string;
+  colors?: any;
 }) {
+  const colorScheme = useColorScheme();
+  const themeColors = colors || Colors[colorScheme];
+
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <IconSymbol name={icon} size={14} color={iconColor} />
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151" }}>{label}</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.foreground }}>{label}</Text>
       </View>
       <TextInput
         value={value}
@@ -311,17 +345,17 @@ function InputField({
         returnKeyType="done"
         style={{
           borderWidth: 1,
-          borderColor: "#D1D5DB",
+          borderColor: themeColors.border,
           borderRadius: 10,
           paddingHorizontal: 14,
           paddingVertical: 12,
           fontSize: 16,
-          color: "#0F0F0F",
-          backgroundColor: "#FAFAFA",
+          color: themeColors.foreground,
+          backgroundColor: themeColors.surface,
         }}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={themeColors.muted}
       />
-      {hint && <Text style={{ fontSize: 11, color: "#9CA3AF" }}>{hint}</Text>}
+      {hint && <Text style={{ fontSize: 11, color: themeColors.muted }}>{hint}</Text>}
     </View>
   );
 }
