@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { aiInfoRouter } from "../ai-info-router";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -81,3 +82,34 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+
+// ─── Daily AI Info Scheduler ───────────────────────────────────────────────
+// Runs every day at 07:00 JST (22:00 UTC previous day)
+function scheduleDailyAiUpdate() {
+  const now = new Date();
+  // Calculate next 07:00 JST (UTC+9 = UTC-9h offset)
+  const nextRun = new Date();
+  nextRun.setUTCHours(22, 0, 0, 0); // 22:00 UTC = 07:00 JST
+  if (nextRun <= now) {
+    nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+  }
+  const msUntilNext = nextRun.getTime() - now.getTime();
+  const hoursUntil = Math.round(msUntilNext / 1000 / 60 / 60 * 10) / 10;
+  console.log(`[scheduler] Next AI info update in ${hoursUntil}h (${nextRun.toISOString()})`);
+
+  setTimeout(async () => {
+    console.log("[scheduler] Running daily AI info update...");
+    try {
+      // Call generateReport mutation directly via the router caller
+      const caller = appRouter.createCaller({ req: {} as any, res: {} as any, user: null });
+      const result = await caller.aiInfo.generateReport();
+      console.log(`[scheduler] AI info update complete:`, result);
+    } catch (err) {
+      console.error("[scheduler] AI info update failed:", err);
+    }
+    // Schedule next run
+    scheduleDailyAiUpdate();
+  }, msUntilNext);
+}
+
+scheduleDailyAiUpdate();

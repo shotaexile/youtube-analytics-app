@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, aiDailyReport, InsertAiDailyReport } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -90,3 +90,25 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // TODO: add feature queries here as your schema grows.
+
+/** Get the latest AI daily report */
+export async function getLatestAiDailyReport() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(aiDailyReport).orderBy(desc(aiDailyReport.reportDate)).limit(1);
+  return rows[0] ?? null;
+}
+
+/** Upsert AI daily report for a given date */
+export async function upsertAiDailyReport(data: InsertAiDailyReport) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(aiDailyReport).values(data).onDuplicateKeyUpdate({
+    set: {
+      latestNews: data.latestNews,
+      toolRankings: data.toolRankings,
+      videoAiTools: data.videoAiTools,
+      generatedAt: new Date(),
+    },
+  });
+}

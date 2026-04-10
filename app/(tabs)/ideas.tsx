@@ -1,556 +1,577 @@
+import React, { useState } from "react";
 import {
-  ScrollView, Text, View, TouchableOpacity, TextInput,
-  ActivityIndicator, RefreshControl, Image, Linking, Platform
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  StyleSheet,
 } from "react-native";
-import { useState, useCallback } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
+import { useColors } from "@/hooks/use-colors";
 
-// ── 型定義 ──────────────────────────────────────────────────────────────────
-type TrendVideo = {
-  videoId: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface NewsItem {
   title: string;
-  channel: string;
-  views: string;
-  publishedAt: string;
-  thumbnail: string;
+  summary: string;
+  category: string;
+  impact: "high" | "medium" | "low";
+}
+
+interface ToolItem {
+  rank: number;
+  toolName: string;
   description: string;
-};
-
-type TrendCategory = {
-  category: string;
-  videos: TrendVideo[];
-};
-
-type IdeaItem = {
-  title: string;
-  concept: string;
-  titleOptions: string[];
-  thumbnailConcept: string;
-  whyBuzz: string;
-  buzzScore: number;
-  estimatedCtr: string;
-  category: string;
-  trendKeyword: string;
-};
-
-type SelectedTrend = {
-  title: string;
-  category: string;
-  views?: string;
-};
-
-// ── バズスコアカラー ──────────────────────────────────────────────────────────
-function getBuzzColor(score: number): string {
-  if (score >= 85) return '#DC2626';
-  if (score >= 70) return '#EA580C';
-  if (score >= 55) return '#D97706';
-  return '#6B7280';
+  bestFor: string;
+  url?: string;
 }
 
-function getBuzzLabel(score: number): string {
-  if (score >= 85) return '超バズ確定';
-  if (score >= 70) return 'バズ期待大';
-  if (score >= 55) return '伸びる可能性あり';
-  return '要改善';
+interface RankingCategory {
+  category: string;
+  tools: ToolItem[];
 }
 
-// ── バズスコアメーター ────────────────────────────────────────────────────────
-function BuzzMeter({ score }: { score: number }) {
-  const color = getBuzzColor(score);
-  const label = getBuzzLabel(score);
+interface VideoTool {
+  toolName: string;
+  category: string;
+  description: string;
+  useCases: string[];
+  tips: string;
+  url?: string;
+  pricing: string;
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function ImpactBadge({ impact }: { impact: string }) {
+  const colors = useColors();
+  const colorMap: Record<string, string> = {
+    high: colors.error,
+    medium: colors.warning,
+    low: colors.success,
+  };
+  const labelMap: Record<string, string> = {
+    high: "重要",
+    medium: "注目",
+    low: "参考",
+  };
+  const bg = colorMap[impact] ?? colors.muted;
   return (
-    <View style={{ alignItems: 'center' }}>
-      <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 5, borderColor: color, alignItems: 'center', justifyContent: 'center', backgroundColor: color + '15' }}>
-        <Text style={{ fontSize: 22, fontWeight: '900', color }}>{score}</Text>
-      </View>
-      <Text style={{ fontSize: 10, fontWeight: '700', color, marginTop: 4, textAlign: 'center' }}>{label}</Text>
+    <View style={[styles.badge, { backgroundColor: bg + "22", borderColor: bg, borderWidth: 1 }]}>
+      <Text style={[styles.badgeText, { color: bg }]}>{labelMap[impact] ?? impact}</Text>
     </View>
   );
 }
 
-// ── 企画カード ────────────────────────────────────────────────────────────────
-function IdeaCard({ idea, index }: { idea: IdeaItem; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const buzzColor = getBuzzColor(idea.buzzScore);
+function NewsCard({ item }: { item: NewsItem }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.categoryTag, { backgroundColor: colors.primary + "22" }]}>
+          <Text style={[styles.categoryText, { color: colors.primary }]}>{item.category}</Text>
+        </View>
+        <ImpactBadge impact={item.impact} />
+      </View>
+      <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.title}</Text>
+      <Text style={[styles.cardBody, { color: colors.muted }]}>{item.summary}</Text>
+    </View>
+  );
+}
+
+function RankingCard({ category }: { category: RankingCategory }) {
+  const colors = useColors();
+  const rankColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.sectionLabel, { color: colors.primary }]}>{category.category}</Text>
+      {(category.tools ?? []).slice(0, 3).map((tool, i) => (
+        <View
+          key={tool.toolName}
+          style={[
+            styles.rankRow,
+            i < Math.min((category.tools?.length ?? 0) - 1, 2) && {
+              borderBottomWidth: 0.5,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <View style={[styles.rankBadge, { backgroundColor: rankColors[i] ?? colors.muted }]}>
+            <Text style={styles.rankNum}>{tool.rank ?? i + 1}</Text>
+          </View>
+          <View style={styles.rankInfo}>
+            <Text style={[styles.toolName, { color: colors.foreground }]}>{tool.toolName}</Text>
+            <Text style={[styles.toolDesc, { color: colors.muted }]}>{tool.description}</Text>
+            <Text style={[styles.toolBest, { color: colors.primary }]}>✓ {tool.bestFor}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function VideoToolCard({ tool }: { tool: VideoTool }) {
+  const colors = useColors();
+  const pricingColor =
+    tool.pricing === "無料"
+      ? colors.success
+      : tool.pricing === "フリーミアム"
+      ? colors.warning
+      : colors.muted;
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.categoryTag, { backgroundColor: colors.primary + "22" }]}>
+          <Text style={[styles.categoryText, { color: colors.primary }]}>{tool.category}</Text>
+        </View>
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: pricingColor + "22", borderColor: pricingColor, borderWidth: 1 },
+          ]}
+        >
+          <Text style={[styles.badgeText, { color: pricingColor }]}>{tool.pricing}</Text>
+        </View>
+      </View>
+      <Text style={[styles.cardTitle, { color: colors.foreground }]}>{tool.toolName}</Text>
+      <Text style={[styles.cardBody, { color: colors.muted }]}>{tool.description}</Text>
+      <View style={styles.useCaseList}>
+        {(tool.useCases ?? []).map((uc, i) => (
+          <Text key={i} style={[styles.useCaseItem, { color: colors.foreground }]}>
+            • {uc}
+          </Text>
+        ))}
+      </View>
+      {tool.tips ? (
+        <View
+          style={[
+            styles.tipBox,
+            { backgroundColor: colors.primary + "11", borderLeftColor: colors.primary },
+          ]}
+        >
+          <Text style={[styles.tipText, { color: colors.foreground }]}>💡 {tool.tips}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
+
+type Tab = "news" | "rankings" | "video";
+
+export default function IdeasScreen() {
+  const colors = useColors();
+  const [activeTab, setActiveTab] = useState<Tab>("news");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const {
+    data: report,
+    isLoading,
+    refetch,
+  } = trpc.aiInfo.getLatestReport.useQuery(undefined, {
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const generateMutation = trpc.aiInfo.generateReport.useMutation({
+    onSuccess: () => refetch(),
+    onSettled: () => setRefreshing(false),
+  });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await generateMutation.mutateAsync();
+  };
+
+  const tabs: { key: Tab; label: string; emoji: string }[] = [
+    { key: "news", label: "最新ニュース", emoji: "📰" },
+    { key: "rankings", label: "ツール比較", emoji: "🏆" },
+    { key: "video", label: "動画AI", emoji: "🎬" },
+  ];
+
+  const latestNews: NewsItem[] = (report?.latestNews as NewsItem[]) ?? [];
+  const toolRankings: RankingCategory[] = (report?.toolRankings as RankingCategory[]) ?? [];
+  const videoAiTools: VideoTool[] = (report?.videoAiTools as VideoTool[]) ?? [];
+
+  const reportDateStr = report?.reportDate
+    ? typeof report.reportDate === "string"
+      ? report.reportDate
+      : new Date(report.reportDate as Date).toLocaleDateString("ja-JP")
+    : null;
 
   return (
-    <View style={{
-      backgroundColor: 'white',
-      borderRadius: 20,
-      padding: 18,
-      marginBottom: 16,
-      shadowColor: '#000',
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      elevation: 3,
-      borderLeftWidth: 4,
-      borderLeftColor: buzzColor,
-    }}>
-      {/* ヘッダー */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: buzzColor + '20', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 16, fontWeight: '900', color: buzzColor }}>#{index + 1}</Text>
+    <ScreenContainer>
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.background, borderBottomColor: colors.border },
+        ]}
+      >
+        <View>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            AI情報ダッシュボード
+          </Text>
+          {reportDateStr ? (
+            <Text style={[styles.headerSub, { color: colors.muted }]}>
+              最終更新: {reportDateStr}
+            </Text>
+          ) : (
+            <Text style={[styles.headerSub, { color: colors.muted }]}>毎朝7時に自動更新</Text>
+          )}
         </View>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-              <Text style={{ fontSize: 10, color: '#606060', fontWeight: '600' }}>{idea.category}</Text>
-            </View>
-            <View style={{ backgroundColor: buzzColor + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-              <Text style={{ fontSize: 10, color: buzzColor, fontWeight: '700' }}>CTR予測 {idea.estimatedCtr}</Text>
-            </View>
-          </View>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: '#0F0F0F', lineHeight: 22 }}>{idea.title}</Text>
-        </View>
-        <BuzzMeter score={idea.buzzScore} />
+        <TouchableOpacity
+          style={[styles.refreshBtn, { backgroundColor: colors.primary }]}
+          onPress={handleRefresh}
+          disabled={generateMutation.isPending || refreshing}
+        >
+          {generateMutation.isPending || refreshing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.refreshBtnText}>更新</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* コンセプト */}
-      <View style={{ backgroundColor: '#F8F8F8', borderRadius: 12, padding: 12, marginBottom: 14 }}>
-        <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginBottom: 4 }}>💡 企画コンセプト</Text>
-        <Text style={{ fontSize: 13, color: '#374151', lineHeight: 20 }}>{idea.concept}</Text>
-      </View>
-
-      {/* タイトル案 */}
-      <View style={{ marginBottom: 14 }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F0F0F', marginBottom: 8 }}>📝 タイトル案（3パターン）</Text>
-        {(idea.titleOptions || []).map((title, i) => (
-          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: i === 0 ? '#FF0000' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: i === 0 ? 'white' : '#9CA3AF' }}>{i + 1}</Text>
-            </View>
-            <Text style={{ flex: 1, fontSize: 13, color: '#374151', lineHeight: 20, fontWeight: i === 0 ? '600' : '400' }}>{title}</Text>
-          </View>
+      {/* Tab Bar */}
+      <View
+        style={[
+          styles.tabBar,
+          { backgroundColor: colors.background, borderBottomColor: colors.border },
+        ]}
+      >
+        {tabs.map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            style={[
+              styles.tabItem,
+              activeTab === t.key && {
+                borderBottomColor: colors.primary,
+                borderBottomWidth: 2,
+              },
+            ]}
+            onPress={() => setActiveTab(t.key)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: activeTab === t.key ? colors.primary : colors.muted },
+              ]}
+            >
+              {t.emoji} {t.label}
+            </Text>
+          </TouchableOpacity>
         ))}
       </View>
 
-      {/* 展開ボタン */}
-      <TouchableOpacity
-        onPress={() => setExpanded(!expanded)}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0' }}
-      >
-        <Text style={{ fontSize: 12, color: '#606060', fontWeight: '600' }}>{expanded ? '▲ 詳細を閉じる' : '▼ サムネイル案・バズ理由を見る'}</Text>
-      </TouchableOpacity>
-
-      {/* 展開コンテンツ */}
-      {expanded && (
-        <View style={{ marginTop: 14, gap: 12 }}>
-          {/* サムネイル案 */}
-          <View style={{ backgroundColor: '#FFF5F5', borderRadius: 12, padding: 12 }}>
-            <Text style={{ fontSize: 11, color: '#FF0000', fontWeight: '700', marginBottom: 6 }}>🖼 サムネイル構成案</Text>
-            <Text style={{ fontSize: 13, color: '#374151', lineHeight: 20 }}>{idea.thumbnailConcept}</Text>
-          </View>
-
-          {/* バズ理由 */}
-          <View style={{ backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12 }}>
-            <Text style={{ fontSize: 11, color: '#16A34A', fontWeight: '700', marginBottom: 6 }}>🔥 なぜバズるか（データ根拠）</Text>
-            <Text style={{ fontSize: 13, color: '#374151', lineHeight: 20 }}>{idea.whyBuzz}</Text>
-          </View>
-
-          {/* トレンドキーワード */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>参照トレンド:</Text>
-            <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ fontSize: 12, color: '#2563EB', fontWeight: '600' }}>{idea.trendKeyword}</Text>
-            </View>
-          </View>
+      {/* Content */}
+      {isLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.muted }]}>読み込み中...</Text>
         </View>
-      )}
-    </View>
-  );
-}
-
-// ── トレンド動画カード ────────────────────────────────────────────────────────
-function TrendVideoCard({ video, selected, onToggle }: {
-  video: TrendVideo;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onToggle}
-      style={{
-        width: 180,
-        marginRight: 12,
-        backgroundColor: selected ? '#FFF5F5' : 'white',
-        borderRadius: 14,
-        overflow: 'hidden',
-        borderWidth: 2,
-        borderColor: selected ? '#FF0000' : '#F0F0F0',
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        elevation: 2,
-      }}
-    >
-      {/* サムネイル */}
-      <View style={{ width: '100%', height: 100, backgroundColor: '#F3F4F6', position: 'relative' }}>
-        {video.thumbnail ? (
-          <Image source={{ uri: video.thumbnail }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 24 }}>🎬</Text>
-          </View>
-        )}
-        {selected && (
-          <View style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: '#FF0000', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: 'white', fontSize: 12, fontWeight: '900' }}>✓</Text>
-          </View>
-        )}
-      </View>
-      {/* 情報 */}
-      <View style={{ padding: 10 }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: '#0F0F0F', lineHeight: 16 }} numberOfLines={2}>{video.title}</Text>
-        <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 4 }} numberOfLines={1}>{video.channel}</Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-          <Text style={{ fontSize: 10, color: '#606060' }}>{video.views}</Text>
-          <Text style={{ fontSize: 10, color: '#9CA3AF' }}>{video.publishedAt}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── メイン画面 ────────────────────────────────────────────────────────────────
-export default function IdeasScreen() {
-  const [selectedTrends, setSelectedTrends] = useState<SelectedTrend[]>([]);
-  const [generatedIdeas, setGeneratedIdeas] = useState<IdeaItem[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [searchResults, setSearchResults] = useState<TrendVideo[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'trends' | 'ideas'>('trends');
-
-  const CATEGORIES = ['all', 'ビジネス・お金', '暴露・炎上', '詐欺・事件', '投資・副業', 'エンタメ・話題'];
-
-  // トレンド動画取得
-  const { data: trendData, isLoading: isTrendLoading, refetch: refetchTrends } = trpc.analytics.getTrendingVideos.useQuery(
-    { category: activeCategory === 'all' ? undefined : activeCategory },
-    { staleTime: 1000 * 60 * 10 } // 10分キャッシュ
-  );
-
-  // 深掘り検索
-  const searchDetailQuery = trpc.analytics.searchTrendDetail.useQuery(
-    { keyword: searchKeyword },
-    { enabled: false }
-  );
-
-  // AI企画生成
-  const generateIdeasMutation = trpc.analytics.generateIdeas.useMutation({
-    onSuccess: (data) => {
-      setGeneratedIdeas(data.ideas || []);
-      setActiveTab('ideas');
-      setIsGenerating(false);
-    },
-    onError: () => {
-      setIsGenerating(false);
-    },
-  });
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refetchTrends();
-    setRefreshing(false);
-  }, [refetchTrends]);
-
-  const toggleTrend = (video: TrendVideo, category: string) => {
-    const exists = selectedTrends.find(t => t.title === video.title);
-    if (exists) {
-      setSelectedTrends(prev => prev.filter(t => t.title !== video.title));
-    } else {
-      if (selectedTrends.length >= 5) return; // 最大5件
-      setSelectedTrends(prev => [...prev, { title: video.title, category, views: video.views }]);
-    }
-  };
-
-  const handleGenerate = () => {
-    if (selectedTrends.length === 0) return;
-    setIsGenerating(true);
-    generateIdeasMutation.mutate({ selectedTrends });
-  };
-
-  const handleSearch = async () => {
-    if (!searchKeyword.trim()) return;
-    setIsSearching(true);
-    try {
-      const result = await searchDetailQuery.refetch();
-      setSearchResults(result.data?.videos || []);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const allTrendVideos: { video: TrendVideo; category: string }[] = [];
-  if (trendData?.trends) {
-    for (const cat of trendData.trends) {
-      for (const v of cat.videos) {
-        allTrendVideos.push({ video: v, category: cat.category });
-      }
-    }
-  }
-
-  return (
-    <ScreenContainer containerClassName="bg-[#F8F8F8]">
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF0000" colors={['#FF0000']} />
-        }
-      >
-        {/* Sticky Header */}
-        <View style={{ backgroundColor: 'white', paddingTop: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: '#E5E5E5' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12 }}>
-            <View>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F0F0F' }}>🔥 企画提案AI</Text>
-              <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>トレンド×過去データでバズ企画を自動生成</Text>
-            </View>
-            {selectedTrends.length > 0 && (
-              <View style={{ backgroundColor: '#FF0000', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-                <Text style={{ fontSize: 12, color: 'white', fontWeight: '700' }}>{selectedTrends.length}件選択中</Text>
-              </View>
+      ) : !report ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyEmoji}>🤖</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            まだデータがありません
+          </Text>
+          <Text style={[styles.emptyBody, { color: colors.muted }]}>
+            「今すぐ生成する」を押すと、AIが最新情報を収集します。{"\n"}毎朝7時に自動更新されます。
+          </Text>
+          <TouchableOpacity
+            style={[styles.generateBtn, { backgroundColor: colors.primary }]}
+            onPress={handleRefresh}
+            disabled={generateMutation.isPending}
+          >
+            {generateMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.generateBtnText}>今すぐ生成する</Text>
             )}
-          </View>
-
-          {/* タブ切り替え */}
-          <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => setActiveTab('trends')}
-              style={{
-                flex: 1, paddingVertical: 10, borderRadius: 12,
-                backgroundColor: activeTab === 'trends' ? '#FF0000' : '#F3F4F6',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: activeTab === 'trends' ? 'white' : '#606060' }}>
-                📡 トレンド収集
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setActiveTab('ideas')}
-              style={{
-                flex: 1, paddingVertical: 10, borderRadius: 12,
-                backgroundColor: activeTab === 'ideas' ? '#FF0000' : '#F3F4F6',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: activeTab === 'ideas' ? 'white' : '#606060' }}>
-                💡 企画提案 {generatedIdeas.length > 0 ? `(${generatedIdeas.length})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </View>
-
-        <View style={{ padding: 16, gap: 16 }}>
-
-          {/* ── トレンド収集タブ ── */}
-          {activeTab === 'trends' && (
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          {activeTab === "news" && (
             <>
-              {/* 検索バー */}
-              <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 14, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F0F0F', marginBottom: 10 }}>🔍 キーワードで深掘り検索</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TextInput
-                    value={searchKeyword}
-                    onChangeText={setSearchKeyword}
-                    placeholder="例: ホストクラブ規制、詐欺師逮捕..."
-                    placeholderTextColor="#9CA3AF"
-                    style={{
-                      flex: 1, height: 42, backgroundColor: '#F8F8F8', borderRadius: 10,
-                      paddingHorizontal: 12, fontSize: 13, color: '#0F0F0F',
-                    }}
-                    returnKeyType="search"
-                    onSubmitEditing={handleSearch}
-                  />
-                  <TouchableOpacity
-                    onPress={handleSearch}
-                    style={{ width: 42, height: 42, backgroundColor: '#FF0000', borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    {isSearching ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Text style={{ fontSize: 18 }}>🔍</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                {/* 検索結果 */}
-                {searchResults.length > 0 && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8 }}>検索結果（タップで企画生成に追加）</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {searchResults.map((video, i) => (
-                        <TrendVideoCard
-                          key={i}
-                          video={video}
-                          selected={!!selectedTrends.find(t => t.title === video.title)}
-                          onToggle={() => toggleTrend(video, searchKeyword)}
-                        />
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              {/* カテゴリフィルター */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-                {CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    onPress={() => setActiveCategory(cat)}
-                    style={{
-                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-                      backgroundColor: activeCategory === cat ? '#FF0000' : '#F3F4F6',
-                    }}
-                  >
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: activeCategory === cat ? 'white' : '#606060' }}>
-                      {cat === 'all' ? '🌐 全て' : cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* トレンド動画一覧 */}
-              {isTrendLoading ? (
-                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                  <ActivityIndicator size="large" color="#FF0000" />
-                  <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 12 }}>YouTubeトレンドを収集中...</Text>
-                </View>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                AI最新ニュース
+              </Text>
+              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+                ChatGPT・Gemini・Claude・動画AIなど最新動向
+              </Text>
+              {latestNews.length === 0 ? (
+                <Text
+                  style={[
+                    styles.emptyBody,
+                    { color: colors.muted, textAlign: "center", marginTop: 24 },
+                  ]}
+                >
+                  ニュースデータがありません
+                </Text>
               ) : (
-                <>
-                  {(trendData?.trends || []).map((cat, ci) => (
-                    <View key={ci} style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F' }}>{cat.category}</Text>
-                        <Text style={{ fontSize: 11, color: '#9CA3AF' }}>{cat.videos.length}件</Text>
-                      </View>
-                      {cat.videos.length > 0 ? (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingHorizontal: 4 }}>
-                          {cat.videos.map((video: TrendVideo, vi: number) => (
-                            <TrendVideoCard
-                              key={vi}
-                              video={video}
-                              selected={!!selectedTrends.find(t => t.title === video.title)}
-                              onToggle={() => toggleTrend(video, cat.category)}
-                            />
-                          ))}
-                        </ScrollView>
-                      ) : (
-                        <Text style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingVertical: 12 }}>データを取得できませんでした</Text>
-                      )}
-                    </View>
-                  ))}
-                </>
+                latestNews.map((item, i) => <NewsCard key={i} item={item} />)
               )}
-
-              {/* 選択済みトレンド */}
-              {selectedTrends.length > 0 && (
-                <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F0F0F', marginBottom: 12 }}>✅ 選択中のトレンド（{selectedTrends.length}/5件）</Text>
-                  {selectedTrends.map((t, i) => (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: i < selectedTrends.length - 1 ? 0.5 : 0, borderBottomColor: '#F0F0F0' }}>
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF0000' }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F0F0F' }} numberOfLines={1}>{t.title}</Text>
-                        <Text style={{ fontSize: 10, color: '#9CA3AF' }}>{t.category}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => setSelectedTrends(prev => prev.filter(s => s.title !== t.title))}>
-                        <Text style={{ fontSize: 18, color: '#9CA3AF' }}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* AI企画生成ボタン */}
-              <TouchableOpacity
-                onPress={handleGenerate}
-                disabled={selectedTrends.length === 0 || isGenerating}
-                style={{
-                  backgroundColor: selectedTrends.length === 0 ? '#E5E7EB' : '#FF0000',
-                  borderRadius: 16,
-                  padding: 18,
-                  alignItems: 'center',
-                  flexDirection: 'row',
-                  justifyContent: 'center',
-                  gap: 10,
-                  shadowColor: '#FF0000',
-                  shadowOpacity: selectedTrends.length > 0 ? 0.3 : 0,
-                  shadowRadius: 12,
-                  elevation: selectedTrends.length > 0 ? 4 : 0,
-                }}
-              >
-                {isGenerating ? (
-                  <>
-                    <ActivityIndicator size="small" color="white" />
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: 'white' }}>AIが企画を考えています...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 20 }}>🤖</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: selectedTrends.length === 0 ? '#9CA3AF' : 'white' }}>
-                      {selectedTrends.length === 0 ? 'トレンドを選択してください' : `${selectedTrends.length}件のトレンドで企画を生成`}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
             </>
           )}
 
-          {/* ── 企画提案タブ ── */}
-          {activeTab === 'ideas' && (
+          {activeTab === "rankings" && (
             <>
-              {generatedIdeas.length === 0 ? (
-                <View style={{ alignItems: 'center', paddingVertical: 60, gap: 16 }}>
-                  <Text style={{ fontSize: 48 }}>💡</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F0F0F', textAlign: 'center' }}>まだ企画がありません</Text>
-                  <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 20 }}>
-                    「トレンド収集」タブでトレンドを選択し、{'\n'}AIに企画を生成させてください
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setActiveTab('trends')}
-                    style={{ backgroundColor: '#FF0000', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
-                  >
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: 'white' }}>トレンドを見る →</Text>
-                  </TouchableOpacity>
-                </View>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                AIツール得意分野ランキング
+              </Text>
+              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+                リサーチ・画像生成・スライド作成など用途別に最強ツールを一目で確認
+              </Text>
+              {toolRankings.length === 0 ? (
+                <Text
+                  style={[
+                    styles.emptyBody,
+                    { color: colors.muted, textAlign: "center", marginTop: 24 },
+                  ]}
+                >
+                  ランキングデータがありません
+                </Text>
               ) : (
-                <>
-                  {/* サマリーバナー */}
-                  <View style={{ backgroundColor: '#FF0000', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <Text style={{ fontSize: 36 }}>🎯</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: 'white' }}>AI企画提案 {generatedIdeas.length}本</Text>
-                      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
-                        過去{'\u306e'}勝ちパターン × 最新トレンドで生成
-                      </Text>
-                      <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
-                        バズスコア最高: {Math.max(...generatedIdeas.map(i => i.buzzScore))}点
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* 企画カード一覧 */}
-                  {generatedIdeas.map((idea, i) => (
-                    <IdeaCard key={i} idea={idea} index={i} />
-                  ))}
-
-                  {/* 再生成ボタン */}
-                  <TouchableOpacity
-                    onPress={() => setActiveTab('trends')}
-                    style={{ backgroundColor: 'white', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 2, borderColor: '#FF0000' }}
-                  >
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#FF0000' }}>🔄 別のトレンドで再生成する</Text>
-                  </TouchableOpacity>
-                </>
+                toolRankings.map((cat, i) => <RankingCard key={i} category={cat} />)
               )}
             </>
           )}
-        </View>
-      </ScrollView>
+
+          {activeTab === "video" && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                動画制作AIツール活用事例
+              </Text>
+              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+                Kling・DomoAI・Veo3・Runwayなど動画編集に使えるAIツールの最新情報
+              </Text>
+              {videoAiTools.length === 0 ? (
+                <Text
+                  style={[
+                    styles.emptyBody,
+                    { color: colors.muted, textAlign: "center", marginTop: 24 },
+                  ]}
+                >
+                  動画AIツールデータがありません
+                </Text>
+              ) : (
+                videoAiTools.map((tool, i) => <VideoToolCard key={i} tool={tool} />)
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
     </ScreenContainer>
   );
 }
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  headerSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  refreshBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    minWidth: 60,
+    alignItems: "center",
+  },
+  refreshBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  tabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 0.5,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  sectionDesc: {
+    fontSize: 12,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  card: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 0.5,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  cardBody: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  categoryTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    gap: 10,
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankNum: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  rankInfo: {
+    flex: 1,
+  },
+  toolName: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  toolDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 2,
+  },
+  toolBest: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  useCaseList: {
+    marginTop: 8,
+    gap: 3,
+  },
+  useCaseItem: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  tipBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+  },
+  tipText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  emptyBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  generateBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    minWidth: 160,
+    alignItems: "center",
+  },
+  generateBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+});

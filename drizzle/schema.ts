@@ -145,3 +145,22 @@ export const videoEarlyStats = mysqlTable("video_early_stats", {
 });
 export type VideoEarlyStatsRow = typeof videoEarlyStats.$inferSelect;
 export type InsertVideoEarlyStats = typeof videoEarlyStats.$inferInsert;
+
+/**
+ * AI daily report - collected every morning at 7am
+ * Stores latest AI news, tool rankings, and video AI tool use cases
+ */
+export const aiDailyReport = mysqlTable("ai_daily_report", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: date("reportDate").notNull(),
+  // JSON string: { title, summary, source, category }[]
+  latestNews: text("latestNews"),
+  // JSON string: { rank, toolName, category, description, examples }[]
+  toolRankings: text("toolRankings"),
+  // JSON string: { toolName, category, useCases, tips }[]
+  videoAiTools: text("videoAiTools"),
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AiDailyReport = typeof aiDailyReport.$inferSelect;
+export type InsertAiDailyReport = typeof aiDailyReport.$inferInsert;
