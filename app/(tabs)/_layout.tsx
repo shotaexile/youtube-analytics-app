@@ -106,6 +106,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={22} name="clock.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "設定",
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="gear" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -46,6 +46,9 @@ const MAPPING = {
   "calendar": "calendar-today",
   "calendar.badge.clock": "date-range",
   "lightbulb.fill": "lightbulb",
+  "gear": "settings",
+  "moon.fill": "dark-mode",
+  "sun.max.fill": "light-mode",
 } as IconMapping;
 
 export function IconSymbol({

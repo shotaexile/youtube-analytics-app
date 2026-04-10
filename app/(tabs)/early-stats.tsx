@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useContext } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { trpc } from "@/lib/trpc";
@@ -434,6 +434,7 @@ function VideoPickerRow({
   publishedAt,
   isShort,
   hasData,
+  dataCount,
   onPress,
 }: {
   videoId: string;
@@ -441,6 +442,7 @@ function VideoPickerRow({
   publishedAt: string;
   isShort: boolean;
   hasData: boolean;
+  dataCount: number;
   onPress: () => void;
 }) {
   const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
@@ -465,7 +467,7 @@ function VideoPickerRow({
           <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{publishedAt}</Text>
           {hasData && (
             <View style={{ backgroundColor: "#F0FDF4", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
-              <Text style={{ fontSize: 9, color: "#22C55E", fontWeight: "700" }}>データあり</Text>
+              <Text style={{ fontSize: 9, color: "#22C55E", fontWeight: "700" }}>{dataCount}/4件入力済</Text>
             </View>
           )}
         </View>
@@ -483,6 +485,20 @@ export default function EarlyStatsScreen() {
   const [selectedSortMetric, setSelectedSortMetric] = useState<SortMetric>("views");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<{ id: string; title: string } | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setToastVisible(true);
+    if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastVisible(false), 2000) as unknown as number;
+  }, []);
+
+  useEffect(() => {
+    return () => { if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current); };
+  }, []);
 
   const { videos: allVideos } = useVideos("all");
 
@@ -498,8 +514,12 @@ export default function EarlyStatsScreen() {
     { enabled: !!selectedVideo?.id, staleTime: 5_000 }
   );
 
-  // Videos that have early stats (for "データあり" badge)
-  const videosWithData = new Set((rankingQuery.data ?? []).map(r => r.videoId));
+  // Videos that have early stats (for "データあり" badge) + count per video
+  const earlyStatsCountByVideo = new Map<string, number>();
+  for (const r of (rankingQuery.data ?? [])) {
+    earlyStatsCountByVideo.set(r.videoId, (earlyStatsCountByVideo.get(r.videoId) ?? 0) + 1);
+  }
+  const videosWithData = new Set(earlyStatsCountByVideo.keys());
 
   const handleVideoPress = (videoId: string, title: string) => {
     setSelectedVideo({ id: videoId, title });
@@ -511,10 +531,11 @@ export default function EarlyStatsScreen() {
     setSelectedVideo(null);
   };
 
-  const handleSaved = () => {
+  const handleSaved = useCallback(() => {
     rankingQuery.refetch();
     videoEarlyStatsQuery.refetch();
-  };
+    showToast("保存しました");
+  }, [rankingQuery, videoEarlyStatsQuery, showToast]);
 
   // Sort ranking data by selected metric
   const sortedRanking = [...(rankingQuery.data ?? [])].sort((a, b) => {
@@ -571,27 +592,27 @@ export default function EarlyStatsScreen() {
             ))}
           </View>
 
-          {/* Sort metric filter */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-            <View style={{ flexDirection: "row", paddingHorizontal: 16, gap: 6 }}>
-              {SORT_METRICS.map(m => (
-                <TouchableOpacity
-                  key={m.key}
-                  onPress={() => setSelectedSortMetric(m.key)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 5,
-                    borderRadius: 16,
-                    backgroundColor: selectedSortMetric === m.key ? "#0F0F0F" : "#F3F4F6",
-                  }}
-                >
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: selectedSortMetric === m.key ? "#fff" : "#606060" }}>
-                    {m.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+          {/* Sort metric filter - 横並び均等配置 */}
+          <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 8, gap: 5 }}>
+            {SORT_METRICS.map(m => (
+              <TouchableOpacity
+                key={m.key}
+                onPress={() => setSelectedSortMetric(m.key)}
+                style={{
+                  flex: 1,
+                  paddingHorizontal: 2,
+                  paddingVertical: 7,
+                  borderRadius: 10,
+                  backgroundColor: selectedSortMetric === m.key ? "#0F0F0F" : "#F3F4F6",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: "600", color: selectedSortMetric === m.key ? "#fff" : "#606060" }} numberOfLines={1}>
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {/* Ranking list */}
           {rankingQuery.isLoading ? (
@@ -631,6 +652,7 @@ export default function EarlyStatsScreen() {
               publishedAt={item.publishedAt}
               isShort={item.isShort}
               hasData={videosWithData.has(item.id)}
+              dataCount={earlyStatsCountByVideo.get(item.id) ?? 0}
               onPress={() => handleVideoPress(item.id, item.title)}
             />
           )}
@@ -655,6 +677,24 @@ export default function EarlyStatsScreen() {
           onClose={handleModalClose}
           onSaved={handleSaved}
         />
+      )}
+
+      {/* Toast notification */}
+      {toastVisible && (
+        <View style={{
+          position: "absolute",
+          bottom: 90,
+          left: 20,
+          right: 20,
+          backgroundColor: "rgba(0,0,0,0.75)",
+          borderRadius: 12,
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          alignItems: "center",
+          zIndex: 999,
+        }}>
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>{toastMessage}</Text>
+        </View>
       )}
     </ScreenContainer>
   );
