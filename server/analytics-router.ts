@@ -90,6 +90,26 @@ function parseCSVLine(line: string): string[] {
 
 function parseCSVToVideos(csvContent: string): InsertVideo[] {
   const allLines = csvContent.split("\n");
+  // Parse header row to detect column positions dynamically
+  const headerLine = allLines[0] || "";
+  const headers = parseCSVLine(headerLine);
+  // Detect column indices from header names
+  const idxLikeRate = headers.findIndex(h => h.includes("高評価率"));
+  const idxAvgViewRate = headers.findIndex(h => h.includes("平均視聴率"));
+  const idxViews = headers.findIndex(h => h.includes("視聴回数"));
+  const idxSubscriber = headers.findIndex(h => h.includes("チャンネル登録者"));
+  const idxRevenue = headers.findIndex(h => h.includes("推定収益"));
+  const idxImpressions = headers.findIndex(h => h.includes("インプレッション数"));
+  const idxCtr = headers.findIndex(h => h.includes("クリック率"));
+  // Fallback to fixed positions if header not found
+  const colLikeRate = idxLikeRate >= 0 ? idxLikeRate : 4;
+  const colAvgViewRate = idxAvgViewRate >= 0 ? idxAvgViewRate : 5;
+  const colViews = idxViews >= 0 ? idxViews : 6;
+  const colSubscriber = idxSubscriber >= 0 ? idxSubscriber : 7;
+  const colRevenue = idxRevenue >= 0 ? idxRevenue : 8;
+  const colImpressions = idxImpressions >= 0 ? idxImpressions : 9;
+  const colCtr = idxCtr >= 0 ? idxCtr : 10;
+
   const lines = allLines.slice(1).filter((l) => !l.startsWith("合計"));
   const result: InsertVideo[] = [];
 
@@ -111,13 +131,13 @@ function parseCSVToVideos(csvContent: string): InsertVideo[] {
     } else {
       duration = parseInt(durationRaw) || 0;
     }
-    const likeRate = parseFloat(cols[4]) || 0;
-    const avgViewRate = parseFloat(cols[5]) || 0;
-    const views = parseInt(cols[6]) || 0;
-    const subscriberChange = parseInt(cols[7]) || 0;
-    const estimatedRevenue = parseFloat(cols[8]) || 0;
-    const impressions = parseInt(cols[9]) || 0;
-    const ctr = parseFloat(cols[10]) || 0;
+    const likeRate = parseFloat(cols[colLikeRate]) || 0;     // 高評価率
+    const avgViewRate = parseFloat(cols[colAvgViewRate]) || 0; // 平均視聴率
+    const views = parseInt(cols[colViews]) || 0;
+    const subscriberChange = parseInt(cols[colSubscriber]) || 0;
+    const estimatedRevenue = parseFloat(cols[colRevenue]) || 0;
+    const impressions = parseInt(cols[colImpressions]) || 0;
+    const ctr = parseFloat(cols[colCtr]) || 0;
 
     if (!rawId || !title) continue;
     if (rawId === "合計" || rawId.replace(/^\s+/, "").length !== 11) continue;
@@ -721,5 +741,24 @@ ${trendContext}
       } catch (e) {
         return { videos: [] };
       }
+    }),
+
+  // DBのavgViewRateとlikeRateを入れ替える修正エンドポイント
+  fixSwappedRates: publicProcedure
+    .input(z.object({ secret: z.string() }))
+    .mutation(async ({ input }) => {
+      if (input.secret !== 'fix-swap-2026') throw new Error('Unauthorized');
+      const db = await getDb();
+      if (!db) throw new Error('Database not available');
+      // 全動画のavgViewRateとlikeRateを入れ替える
+      const allVideos = await db.select().from(videos);
+      let updated = 0;
+      for (const v of allVideos) {
+        await db.update(videos)
+          .set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate })
+          .where(eq(videos.id, v.id));
+        updated++;
+      }
+      return { success: true, updated };
     }),
 });

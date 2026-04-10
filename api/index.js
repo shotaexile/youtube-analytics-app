@@ -55710,6 +55710,22 @@ function parseCSVLine(line) {
 }
 function parseCSVToVideos(csvContent) {
   const allLines = csvContent.split("\n");
+  const headerLine = allLines[0] || "";
+  const headers = parseCSVLine(headerLine);
+  const idxLikeRate = headers.findIndex((h) => h.includes("\u9AD8\u8A55\u4FA1\u7387"));
+  const idxAvgViewRate = headers.findIndex((h) => h.includes("\u5E73\u5747\u8996\u8074\u7387"));
+  const idxViews = headers.findIndex((h) => h.includes("\u8996\u8074\u56DE\u6570"));
+  const idxSubscriber = headers.findIndex((h) => h.includes("\u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u8005"));
+  const idxRevenue = headers.findIndex((h) => h.includes("\u63A8\u5B9A\u53CE\u76CA"));
+  const idxImpressions = headers.findIndex((h) => h.includes("\u30A4\u30F3\u30D7\u30EC\u30C3\u30B7\u30E7\u30F3\u6570"));
+  const idxCtr = headers.findIndex((h) => h.includes("\u30AF\u30EA\u30C3\u30AF\u7387"));
+  const colLikeRate = idxLikeRate >= 0 ? idxLikeRate : 4;
+  const colAvgViewRate = idxAvgViewRate >= 0 ? idxAvgViewRate : 5;
+  const colViews = idxViews >= 0 ? idxViews : 6;
+  const colSubscriber = idxSubscriber >= 0 ? idxSubscriber : 7;
+  const colRevenue = idxRevenue >= 0 ? idxRevenue : 8;
+  const colImpressions = idxImpressions >= 0 ? idxImpressions : 9;
+  const colCtr = idxCtr >= 0 ? idxCtr : 10;
   const lines = allLines.slice(1).filter((l) => !l.startsWith("\u5408\u8A08"));
   const result = [];
   for (const line of lines) {
@@ -55728,13 +55744,13 @@ function parseCSVToVideos(csvContent) {
     } else {
       duration3 = parseInt(durationRaw) || 0;
     }
-    const likeRate = parseFloat(cols[4]) || 0;
-    const avgViewRate = parseFloat(cols[5]) || 0;
-    const views = parseInt(cols[6]) || 0;
-    const subscriberChange = parseInt(cols[7]) || 0;
-    const estimatedRevenue = parseFloat(cols[8]) || 0;
-    const impressions = parseInt(cols[9]) || 0;
-    const ctr = parseFloat(cols[10]) || 0;
+    const likeRate = parseFloat(cols[colLikeRate]) || 0;
+    const avgViewRate = parseFloat(cols[colAvgViewRate]) || 0;
+    const views = parseInt(cols[colViews]) || 0;
+    const subscriberChange = parseInt(cols[colSubscriber]) || 0;
+    const estimatedRevenue = parseFloat(cols[colRevenue]) || 0;
+    const impressions = parseInt(cols[colImpressions]) || 0;
+    const ctr = parseFloat(cols[colCtr]) || 0;
     if (!rawId || !title) continue;
     if (rawId === "\u5408\u8A08" || rawId.replace(/^\s+/, "").length !== 11) continue;
     const isShort = duration3 > 0 && duration3 <= 60;
@@ -56183,6 +56199,19 @@ ${trendContext}
     } catch (e) {
       return { videos: [] };
     }
+  }),
+  // DBのavgViewRateとlikeRateを入れ替える修正エンドポイント
+  fixSwappedRates: publicProcedure.input(external_exports.object({ secret: external_exports.string() })).mutation(async ({ input }) => {
+    if (input.secret !== "fix-swap-2026") throw new Error("Unauthorized");
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const allVideos = await db.select().from(videos);
+    let updated = 0;
+    for (const v of allVideos) {
+      await db.update(videos).set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate }).where(eq(videos.id, v.id));
+      updated++;
+    }
+    return { success: true, updated };
   })
 });
 
@@ -56669,4 +56698,5 @@ serve-static/index.js:
 */
 
 // Vercel Serverless Function handler
-module.exports = (req, res) => app(req, res);
+const _handler = module.exports;
+module.exports = typeof _handler === 'function' ? _handler : (_handler.default || function(req, res) { res.status(500).json({ error: 'Handler not found' }); });
