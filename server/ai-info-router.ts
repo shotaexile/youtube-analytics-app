@@ -48,31 +48,51 @@ export const aiInfoRouter = router({
   generateReport: publicProcedure.mutation(async () => {
     const today = new Date().toISOString().split("T")[0];
 
-    // --- 1. Latest AI News ---
-    const newsResponse = await invokeLLM({
-      messages: [
-        {
-          role: "system",
-          content: `あなたはAI業界の最新情報に精通したアナリストです。
-今日の日付は ${today} です。
-AIに関する最新ニュースを5件、JSON形式で返してください。
-必ず以下のJSON配列形式で返してください（他のテキストは不要）:
-[
-  {
-    "title": "ニュースタイトル",
-    "summary": "100文字以内の要約",
-    "category": "カテゴリ（例: LLM/画像生成/動画AI/音声AI/ビジネス）",
-    "impact": "high/medium/low"
-  }
-]`,
-        },
-        {
-          role: "user",
-          content: `${today}時点でのAI最新ニュースを5件教えてください。ChatGPT、Gemini、Claude、Grok、Sora、Kling、Veo、Runway、Midjourney等のAIツールに関するニュースを優先してください。`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
+    // --- 並列でLLMを呼び出して高速化 ---
+    const [newsResponse, rankingsResponse, videoToolsResponse] = await Promise.all([
+      // 1. Latest AI News
+      invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `あなたはAI業界の最新情報に精通したアナリストです。今日の日付は ${today} です。AIに関する最新ニュースを5件、JSON形式で返してください。必ず以下のJSON配列形式で返してください（他のテキストは不要）: [{"title":"ニュースタイトル","summary":"100文字以内の要約","category":"カテゴリ（例: LLM/画像生成/動画AI/音声AI/ビジネス）","impact":"high/medium/low"}]`,
+          },
+          {
+            role: "user",
+            content: `${today}時点でのAI最新ニュースを5件教えてください。ChatGPT、Gemini、Claude、Grok、Sora、Kling、Veo、Runway、Midjourney等のAIツールに関するニュースを優先してください。`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
+      // 2. AI Tool Rankings by Category
+      invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `あなたはAIツールの専門家です。各カテゴリで最も優れたAIツールをランキング形式で教えてください。必ず以下のJSON配列形式で返してください（他のテキストは不要）: [{"category":"カテゴリ名","tools":[{"rank":1,"toolName":"ツール名","description":"得意なこと・特徴（50文字以内）","bestFor":"最適なユースケース（30文字以内）","url":"公式サイトURL"}]}]`,
+          },
+          {
+            role: "user",
+            content: `以下のカテゴリで現在最強のAIツールをランキングしてください：1.リサーチ・情報収集（Manus,Perplexity,ChatGPT）2.画像生成（Midjourney,DALL-E,Gemini）3.動画生成（Kling,Veo3,Sora,Runway,DomoAI）4.スライド・資料作成（Claude,Gamma）5.文章・コピーライティング（Claude,ChatGPT）6.コーディング（Cursor,GitHub Copilot,Claude）7.音声・音楽生成（ElevenLabs,Suno,Udio）各カテゴリ上位3ツールを返してください。`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
+      // 3. Video AI Tools Use Cases
+      invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `あなたはYouTube動画制作に特化したAIツールの専門家です。必ず以下のJSON配列形式で返してください（他のテキストは不要）: [{"toolName":"ツール名","category":"カテゴリ（動画生成/動画編集/サムネイル/BGM/字幕/エフェクト）","description":"ツールの概要（50文字以内）","useCases":["活用事例1","活用事例2","活用事例3"],"tips":"YouTuberへのアドバイス（100文字以内）","url":"公式サイトURL","pricing":"無料/有料/フリーミアム"}]`,
+          },
+          {
+            role: "user",
+            content: `YouTube動画制作に使えるAIツールを教えてください。Kling AI、DomoAI、Veo3、Runway、Pika、Sora、ElevenLabs、Midjourney、CapCut AI、Topaz Video AIを含めてください。各ツールの活用事例とYouTuberへのアドバイスを含めてください。`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    ]);
 
     let latestNews: unknown[] = [];
     try {
@@ -82,46 +102,6 @@ AIに関する最新ニュースを5件、JSON形式で返してください。
       latestNews = [];
     }
 
-    // --- 2. AI Tool Rankings by Category ---
-    const rankingsResponse = await invokeLLM({
-      messages: [
-        {
-          role: "system",
-          content: `あなたはAIツールの専門家です。
-各カテゴリで最も優れたAIツールをランキング形式で教えてください。
-必ず以下のJSON配列形式で返してください（他のテキストは不要）:
-[
-  {
-    "category": "カテゴリ名",
-    "tools": [
-      {
-        "rank": 1,
-        "toolName": "ツール名",
-        "description": "得意なこと・特徴（50文字以内）",
-        "bestFor": "最適なユースケース（30文字以内）",
-        "url": "公式サイトURL"
-      }
-    ]
-  }
-]`,
-        },
-        {
-          role: "user",
-          content: `以下のカテゴリで現在最強のAIツールをランキングしてください：
-1. リサーチ・情報収集（例: Manus, Perplexity, ChatGPT）
-2. 画像生成（例: Midjourney, DALL-E, Gemini, Stable Diffusion）
-3. 動画生成（例: Kling, Veo3, Sora, Runway, Pika, DomoAI）
-4. スライド・資料作成（例: Claude, Gamma, Beautiful.ai）
-5. 文章・コピーライティング（例: Claude, ChatGPT, Gemini）
-6. コーディング（例: Cursor, GitHub Copilot, Claude）
-7. 音声・音楽生成（例: ElevenLabs, Suno, Udio）
-
-各カテゴリ上位3ツールを返してください。`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
-
     let toolRankings: unknown[] = [];
     try {
       const parsed = JSON.parse(rankingsResponse.choices[0].message.content as string);
@@ -129,47 +109,6 @@ AIに関する最新ニュースを5件、JSON形式で返してください。
     } catch {
       toolRankings = [];
     }
-
-    // --- 3. Video AI Tools Use Cases ---
-    const videoToolsResponse = await invokeLLM({
-      messages: [
-        {
-          role: "system",
-          content: `あなたはYouTube動画制作に特化したAIツールの専門家です。
-動画編集・制作に使えるAIツールの活用事例を教えてください。
-必ず以下のJSON配列形式で返してください（他のテキストは不要）:
-[
-  {
-    "toolName": "ツール名",
-    "category": "カテゴリ（動画生成/動画編集/サムネイル/BGM/字幕/エフェクト）",
-    "description": "ツールの概要（50文字以内）",
-    "useCases": ["活用事例1", "活用事例2", "活用事例3"],
-    "tips": "YouTuberへのアドバイス（100文字以内）",
-    "url": "公式サイトURL",
-    "pricing": "無料/有料/フリーミアム"
-  }
-]`,
-        },
-        {
-          role: "user",
-          content: `YouTube動画制作に使えるAIツールを詳しく教えてください。
-特に以下のツールを含めてください：
-- Kling AI（動画生成）
-- DomoAI（動画変換・アニメ化）
-- Veo3（Google動画生成）
-- Runway（動画編集・生成）
-- Pika（動画生成）
-- Sora（OpenAI動画生成）
-- ElevenLabs（音声生成）
-- Midjourney（サムネイル画像生成）
-- CapCut AI（動画編集）
-- Topaz Video AI（動画高画質化）
-
-各ツールの最新の活用事例とYouTuberへのアドバイスを含めてください。`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
 
     let videoAiTools: unknown[] = [];
     try {
