@@ -226,6 +226,8 @@
 - [x] Vercelにデプロイ完了
 
 ## Manusスケジュールタスク連携 Round 32（ユーザー要望）
-- [ ] ViewCore側にAPIキー認証付きの外部データ受信エンドポイントを追加する（POST /api/ai-info/push）
-- [ ] Manusスケジュールタスクを設定する（毎朝7時にAI情報収集→ViewCore APIに保存）
-- [ ] Vercelにデプロイして動作確認する
+- [x] ViewCore側にAPIキー認証付きの外部データ受信エンドポイントを追加（POST /api/ai-info/push）
+- [x] MANUS_PUSH_API_KEYを生成・Vercel環境変数に設定して認証テスト成功
+- [x] Manusスケジュールタスクを設定（毎朝7時（JST）にAI情報収集→ViewCore APIに保存）
+- [x] 既存のVercelサーバー内スケジューラーを削除しManusタスクに一本化
+- [x] Vercelにデプロイ完了
