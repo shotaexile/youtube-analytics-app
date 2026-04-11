@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -23,6 +24,8 @@ interface NewsItem {
   summary: string;
   category: string;
   impact: "high" | "medium" | "low";
+  url?: string;
+  sourceUrl?: string;
 }
 
 interface ToolItem {
@@ -46,6 +49,13 @@ interface VideoTool {
   tips: string;
   url?: string;
   pricing: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function openUrl(url?: string) {
+  if (!url) return;
+  Linking.openURL(url).catch(() => {});
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -72,6 +82,9 @@ function ImpactBadge({ impact }: { impact: string }) {
 
 function NewsCard({ item }: { item: NewsItem }) {
   const colors = useColors();
+  const linkUrl = item.url ?? item.sourceUrl;
+  const hasLink = !!linkUrl;
+
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.cardHeader}>
@@ -80,7 +93,16 @@ function NewsCard({ item }: { item: NewsItem }) {
         </View>
         <ImpactBadge impact={item.impact} />
       </View>
-      <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.title}</Text>
+      {hasLink ? (
+        <TouchableOpacity onPress={() => openUrl(linkUrl)} activeOpacity={0.7}>
+          <Text style={[styles.cardTitle, styles.linkTitle, { color: colors.primary }]}>
+            {item.title}
+          </Text>
+          <Text style={[styles.linkHint, { color: colors.muted }]}>🔗 タップして詳細を見る</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.title}</Text>
+      )}
       <Text style={[styles.cardBody, { color: colors.muted }]}>{item.summary}</Text>
     </View>
   );
@@ -92,27 +114,37 @@ function RankingCard({ category }: { category: RankingCategory }) {
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionLabel, { color: colors.primary }]}>{category.category}</Text>
-      {(category.tools ?? []).slice(0, 3).map((tool, i) => (
-        <View
-          key={tool.toolName}
-          style={[
-            styles.rankRow,
-            i < Math.min((category.tools?.length ?? 0) - 1, 2) && {
-              borderBottomWidth: 0.5,
-              borderBottomColor: colors.border,
-            },
-          ]}
-        >
-          <View style={[styles.rankBadge, { backgroundColor: rankColors[i] ?? colors.muted }]}>
-            <Text style={styles.rankNum}>{tool.rank ?? i + 1}</Text>
-          </View>
-          <View style={styles.rankInfo}>
-            <Text style={[styles.toolName, { color: colors.foreground }]}>{tool.toolName}</Text>
-            <Text style={[styles.toolDesc, { color: colors.muted }]}>{tool.description}</Text>
-            <Text style={[styles.toolBest, { color: colors.primary }]}>✓ {tool.bestFor}</Text>
-          </View>
-        </View>
-      ))}
+      {(category.tools ?? []).slice(0, 3).map((tool, i) => {
+        const hasLink = !!tool.url;
+        return (
+          <TouchableOpacity
+            key={tool.toolName}
+            onPress={() => hasLink && openUrl(tool.url)}
+            activeOpacity={hasLink ? 0.7 : 1}
+            style={[
+              styles.rankRow,
+              i < Math.min((category.tools?.length ?? 0) - 1, 2) && {
+                borderBottomWidth: 0.5,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <View style={[styles.rankBadge, { backgroundColor: rankColors[i] ?? colors.muted }]}>
+              <Text style={styles.rankNum}>{tool.rank ?? i + 1}</Text>
+            </View>
+            <View style={styles.rankInfo}>
+              <View style={styles.toolNameRow}>
+                <Text style={[styles.toolName, { color: colors.foreground }]}>{tool.toolName}</Text>
+                {hasLink && (
+                  <Text style={[styles.linkIcon, { color: colors.primary }]}>🔗</Text>
+                )}
+              </View>
+              <Text style={[styles.toolDesc, { color: colors.muted }]}>{tool.description}</Text>
+              <Text style={[styles.toolBest, { color: colors.primary }]}>✓ {tool.bestFor}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -125,8 +157,14 @@ function VideoToolCard({ tool }: { tool: VideoTool }) {
       : tool.pricing === "フリーミアム"
       ? colors.warning
       : colors.muted;
+  const hasLink = !!tool.url;
+
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <TouchableOpacity
+      onPress={() => hasLink && openUrl(tool.url)}
+      activeOpacity={hasLink ? 0.85 : 1}
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    >
       <View style={styles.cardHeader}>
         <View style={[styles.categoryTag, { backgroundColor: colors.primary + "22" }]}>
           <Text style={[styles.categoryText, { color: colors.primary }]}>{tool.category}</Text>
@@ -139,6 +177,11 @@ function VideoToolCard({ tool }: { tool: VideoTool }) {
         >
           <Text style={[styles.badgeText, { color: pricingColor }]}>{tool.pricing}</Text>
         </View>
+        {hasLink && (
+          <View style={[styles.badge, { backgroundColor: colors.primary + "22", borderColor: colors.primary, borderWidth: 1 }]}>
+            <Text style={[styles.badgeText, { color: colors.primary }]}>🔗 公式サイト</Text>
+          </View>
+        )}
       </View>
       <Text style={[styles.cardTitle, { color: colors.foreground }]}>{tool.toolName}</Text>
       <Text style={[styles.cardBody, { color: colors.muted }]}>{tool.description}</Text>
@@ -159,7 +202,7 @@ function VideoToolCard({ tool }: { tool: VideoTool }) {
           <Text style={[styles.tipText, { color: colors.foreground }]}>💡 {tool.tips}</Text>
         </View>
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -574,12 +617,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 8,
+    flexWrap: "wrap",
   },
   cardTitle: {
     fontSize: 14,
     fontWeight: "600",
     lineHeight: 20,
     marginBottom: 4,
+  },
+  linkTitle: {
+    textDecorationLine: "underline",
+  },
+  linkHint: {
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  linkIcon: {
+    fontSize: 13,
+    marginLeft: 4,
   },
   cardBody: {
     fontSize: 12,
@@ -624,10 +679,14 @@ const styles = StyleSheet.create({
   rankInfo: {
     flex: 1,
   },
+  toolNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
   toolName: {
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: 2,
   },
   toolDesc: {
     fontSize: 12,

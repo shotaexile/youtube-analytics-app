@@ -55,7 +55,7 @@ export const aiInfoRouter = router({
         messages: [
           {
             role: "system",
-            content: `あなたはAI業界の最新情報に精通したアナリストです。今日の日付は ${today} です。AIに関する最新ニュースを5件、JSON形式で返してください。必ず以下のJSON配列形式で返してください（他のテキストは不要）: [{"title":"ニュースタイトル","summary":"100文字以内の要約","category":"カテゴリ（例: LLM/画像生成/動画AI/音声AI/ビジネス）","impact":"high/medium/low"}]`,
+            content: `あなたはAI業界の最新情報に精通したアナリストです。今日の日付は ${today} です。AIに関する最新ニュースを5件、JSON形式で返してください。必ず以下のJSON配列形式で返してください（他のテキストは不要）: [{"title":"ニュースタイトル","summary":"100文字以内の要約","category":"カテゴリ（例: LLM/画像生成/動画AI/音声AI/ビジネス）","impact":"high/medium/low","url":"ニュースの公式発表ページや記事のURL（不明な場合は空文字）"}]`,
           },
           {
             role: "user",
