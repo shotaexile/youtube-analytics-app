@@ -6,7 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { aiInfoRouter } from "../ai-info-router";
+import { upsertAiDailyReport } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -61,6 +61,43 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  // ─── Manus Push Endpoint ──────────────────────────────────────────────────
+  // Called by Manus scheduled task every morning at 07:00 JST
+  // Accepts AI info data and saves to DB
+  app.post("/api/ai-info/push", async (req, res) => {
+    try {
+      // Verify API key for security
+      const apiKey = req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
+      const expectedKey = process.env.MANUS_PUSH_API_KEY;
+      if (expectedKey && apiKey !== expectedKey) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const { latestNews, toolRankings, videoAiTools, reportDate } = req.body;
+
+      if (!latestNews && !toolRankings && !videoAiTools) {
+        res.status(400).json({ error: "No data provided" });
+        return;
+      }
+
+      const today = reportDate ? new Date(reportDate) : new Date();
+      await upsertAiDailyReport({
+        reportDate: today,
+        latestNews: typeof latestNews === "string" ? latestNews : JSON.stringify(latestNews ?? []),
+        toolRankings: typeof toolRankings === "string" ? toolRankings : JSON.stringify(toolRankings ?? []),
+        videoAiTools: typeof videoAiTools === "string" ? videoAiTools : JSON.stringify(videoAiTools ?? []),
+        generatedAt: new Date(),
+      });
+
+      console.log(`[manus-push] AI info saved for ${today.toISOString().split("T")[0]}`);
+      res.json({ success: true, savedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error("[manus-push] Error:", err);
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -82,34 +119,3 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
-
-// ─── Daily AI Info Scheduler ───────────────────────────────────────────────
-// Runs every day at 07:00 JST (22:00 UTC previous day)
-function scheduleDailyAiUpdate() {
-  const now = new Date();
-  // Calculate next 07:00 JST (UTC+9 = UTC-9h offset)
-  const nextRun = new Date();
-  nextRun.setUTCHours(22, 0, 0, 0); // 22:00 UTC = 07:00 JST
-  if (nextRun <= now) {
-    nextRun.setUTCDate(nextRun.getUTCDate() + 1);
-  }
-  const msUntilNext = nextRun.getTime() - now.getTime();
-  const hoursUntil = Math.round(msUntilNext / 1000 / 60 / 60 * 10) / 10;
-  console.log(`[scheduler] Next AI info update in ${hoursUntil}h (${nextRun.toISOString()})`);
-
-  setTimeout(async () => {
-    console.log("[scheduler] Running daily AI info update...");
-    try {
-      // Call generateReport mutation directly via the router caller
-      const caller = appRouter.createCaller({ req: {} as any, res: {} as any, user: null });
-      const result = await caller.aiInfo.generateReport();
-      console.log(`[scheduler] AI info update complete:`, result);
-    } catch (err) {
-      console.error("[scheduler] AI info update failed:", err);
-    }
-    // Schedule next run
-    scheduleDailyAiUpdate();
-  }, msUntilNext);
-}
-
-scheduleDailyAiUpdate();

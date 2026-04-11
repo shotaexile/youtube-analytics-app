@@ -224,3 +224,8 @@
 - [x] ideas.tsxをAI情報ダッシュボードに全面リニューアル（最新ニュース・ツール比較・動画アイツールの3タブ構成）
 - [x] 毎朝7時（JST）に自動更新するサーバーサイドスケジューラーを追加（server/_core/index.ts）
 - [x] Vercelにデプロイ完了
+
+## Manusスケジュールタスク連携 Round 32（ユーザー要望）
+- [ ] ViewCore側にAPIキー認証付きの外部データ受信エンドポイントを追加する（POST /api/ai-info/push）
+- [ ] Manusスケジュールタスクを設定する（毎朝7時にAI情報収集→ViewCore APIに保存）
+- [ ] Vercelにデプロイして動作確認する
