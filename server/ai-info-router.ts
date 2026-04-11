@@ -1,6 +1,7 @@
 import { publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { getLatestAiDailyReport, upsertAiDailyReport } from "./db";
+import { z } from "zod";
 
 /**
  * AI Information Router
@@ -24,6 +25,21 @@ export const aiInfoRouter = router({
       videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : [],
     };
   }),
+
+  /**
+   * Verify admin password for generating reports manually.
+   * Returns true if password matches, false otherwise.
+   */
+  verifyAdminPassword: publicProcedure
+    .input(z.object({ password: z.string() }))
+    .mutation(async ({ input }) => {
+      const expectedPassword = process.env.ADMIN_GENERATE_PASSWORD;
+      if (!expectedPassword) {
+        // If no password set, deny access
+        return { valid: false };
+      }
+      return { valid: input.password === expectedPassword };
+    }),
 
   /**
    * Generate a fresh AI daily report using LLM.

@@ -7,6 +7,10 @@ import {
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -159,6 +163,105 @@ function VideoToolCard({ tool }: { tool: VideoTool }) {
   );
 }
 
+// ─── Password Modal ───────────────────────────────────────────────────────────
+
+function AdminPasswordModal({
+  visible,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const colors = useColors();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const verifyMutation = trpc.aiInfo.verifyAdminPassword.useMutation({
+    onSuccess: (data) => {
+      if (data.valid) {
+        setPassword("");
+        setError("");
+        onSuccess();
+      } else {
+        setError("パスワードが正しくありません");
+      }
+    },
+    onError: () => setError("認証に失敗しました"),
+  });
+
+  const handleSubmit = () => {
+    if (!password.trim()) {
+      setError("パスワードを入力してください");
+      return;
+    }
+    verifyMutation.mutate({ password });
+  };
+
+  const handleClose = () => {
+    setPassword("");
+    setError("");
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalOverlay}
+      >
+        <View style={[styles.modalBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.foreground }]}>管理者認証</Text>
+          <Text style={[styles.modalDesc, { color: colors.muted }]}>
+            AI情報を今すぐ生成するには管理者パスワードが必要です。
+          </Text>
+          <TextInput
+            style={[
+              styles.passwordInput,
+              {
+                backgroundColor: colors.background,
+                borderColor: error ? colors.error : colors.border,
+                color: colors.foreground,
+              },
+            ]}
+            placeholder="パスワードを入力"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            value={password}
+            onChangeText={(t) => { setPassword(t); setError(""); }}
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
+            autoFocus
+          />
+          {error ? (
+            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+          ) : null}
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+              onPress={handleClose}
+            >
+              <Text style={[styles.modalCancelText, { color: colors.muted }]}>キャンセル</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalConfirmBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSubmit}
+              disabled={verifyMutation.isPending}
+            >
+              {verifyMutation.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalConfirmText}>確認</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 type Tab = "news" | "rankings" | "video";
@@ -167,6 +270,7 @@ export default function IdeasScreen() {
   const colors = useColors();
   const [activeTab, setActiveTab] = useState<Tab>("news");
   const [refreshing, setRefreshing] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const {
     data: report,
@@ -184,6 +288,15 @@ export default function IdeasScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await generateMutation.mutateAsync();
+  };
+
+  const handlePressGenerate = () => {
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSuccess = () => {
+    setShowPasswordModal(false);
+    handleRefresh();
   };
 
   const tabs: { key: Tab; label: string; emoji: string }[] = [
@@ -225,7 +338,7 @@ export default function IdeasScreen() {
         </View>
         <TouchableOpacity
           style={[styles.refreshBtn, { backgroundColor: colors.primary }]}
-          onPress={handleRefresh}
+          onPress={handlePressGenerate}
           disabled={generateMutation.isPending || refreshing}
         >
           {generateMutation.isPending || refreshing ? (
@@ -284,7 +397,7 @@ export default function IdeasScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.generateBtn, { backgroundColor: colors.primary }]}
-            onPress={handleRefresh}
+            onPress={handlePressGenerate}
             disabled={generateMutation.isPending}
           >
             {generateMutation.isPending ? (
@@ -300,7 +413,7 @@ export default function IdeasScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={handleRefresh}
+              onRefresh={handlePressGenerate}
               tintColor={colors.primary}
             />
           }
@@ -375,6 +488,12 @@ export default function IdeasScreen() {
           )}
         </ScrollView>
       )}
+      {/* Admin Password Modal */}
+      <AdminPasswordModal
+        visible={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        onSuccess={handlePasswordSuccess}
+      />
     </ScreenContainer>
   );
 }
@@ -573,5 +692,72 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 15,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalBox: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 0.5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalDesc: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalConfirmText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

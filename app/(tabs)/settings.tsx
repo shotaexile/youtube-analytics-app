@@ -1,10 +1,130 @@
-import { View, Text, TouchableOpacity, Switch, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, Switch, ScrollView, ActivityIndicator } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeContext } from "@/lib/theme-provider";
 import { Colors } from "@/constants/theme";
 import type { ColorScheme } from "@/constants/theme";
+import { trpc } from "@/lib/trpc";
+
+// ─── AI Info Status Section ───────────────────────────────────────────────────
+
+function AiInfoStatusSection({ colors }: { colors: typeof Colors["light"] }) {
+  const { data: report, isLoading, refetch } = trpc.aiInfo.getLatestReport.useQuery(undefined, {
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const formatDateTime = (date: string | Date | null | undefined): string => {
+    if (!date) return "未取得";
+    const d = typeof date === "string" ? new Date(date) : date;
+    return d.toLocaleString("ja-JP", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const statusColor = report ? colors.success : colors.muted;
+  const statusLabel = report ? "最新データあり" : "未生成";
+
+  return (
+    <>
+      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.muted, letterSpacing: 0.5, marginBottom: 8 }}>
+          AI情報ダッシュボード
+        </Text>
+      </View>
+      <View style={{
+        marginHorizontal: 16,
+        backgroundColor: colors.surface,
+        borderRadius: 14,
+        borderWidth: 0.5,
+        borderColor: colors.border,
+        overflow: "hidden",
+        marginBottom: 20,
+      }}>
+        {/* Status row */}
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          borderBottomWidth: 0.5,
+          borderBottomColor: colors.border,
+        }}>
+          <View style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: statusColor + "22",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+          }}>
+            <Text style={{ fontSize: 16 }}>🤖</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>
+              データステータス
+            </Text>
+            <Text style={{ fontSize: 12, color: statusColor, marginTop: 1 }}>
+              {isLoading ? "読み込み中..." : statusLabel}
+            </Text>
+          </View>
+          {isLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <TouchableOpacity
+              onPress={() => refetch()}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: colors.primary + "22",
+              }}
+            >
+              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>更新</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Last updated row */}
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          borderBottomWidth: 0.5,
+          borderBottomColor: colors.border,
+        }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, color: colors.muted }}>最終レポート日</Text>
+          </View>
+          <Text style={{ fontSize: 13, color: colors.foreground, fontWeight: "500" }}>
+            {isLoading ? "---" : formatDateTime(report?.reportDate)}
+          </Text>
+        </View>
+
+        {/* Generated at row */}
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+        }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, color: colors.muted }}>生成日時</Text>
+          </View>
+          <Text style={{ fontSize: 13, color: colors.foreground, fontWeight: "500" }}>
+            {isLoading ? "---" : formatDateTime(report?.generatedAt)}
+          </Text>
+        </View>
+      </View>
+    </>
+  );
+}
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
@@ -150,6 +270,9 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        {/* AI Info section */}
+        <AiInfoStatusSection colors={colors} />
 
         {/* App info section */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
