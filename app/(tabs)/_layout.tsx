@@ -19,9 +19,7 @@ export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  // CONTENT_HEIGHT = the visible area for icon + label (above the home indicator)
   const CONTENT_HEIGHT = 52;
-  // For web/PWA: read CSS env(safe-area-inset-bottom) so tab bar clears the home indicator
   const webBottomInset = Platform.OS === "web" ? Math.max(getWebBottomInset(), insets.bottom) : 0;
   const bottomInset = Platform.OS === "web" ? webBottomInset : Math.max(insets.bottom, 20);
   const tabBarHeight = CONTENT_HEIGHT + bottomInset;
@@ -42,9 +40,9 @@ export default function TabLayout() {
           borderTopWidth: 0.5,
         },
         tabBarLabelStyle: {
-          fontSize: 9,
-          fontWeight: "500",
-          lineHeight: 11,
+          fontSize: 10,
+          fontWeight: "600",
+          lineHeight: 12,
           letterSpacing: -0.3,
           marginBottom: 0,
         },
@@ -57,62 +55,36 @@ export default function TabLayout() {
         tabBarAllowFontScaling: false,
       }}
     >
+      {/* YouTube タブ（メイン） */}
       <Tabs.Screen
         name="index"
         options={{
-          title: "ダッシュボード",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="house.fill" color={color} />,
+          title: "YouTube",
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="play.rectangle.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="rankings"
-        options={{
-          title: "ランキング",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="trophy.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="charts"
-        options={{
-          title: "グラフ",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="chart.line.uptrend.xyaxis" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="videos"
-        options={{
-          title: "動画一覧",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="play.rectangle.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="ai"
-        options={{
-          title: "AI分析",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="brain.head.profile" color={color} />,
-        }}
-      />
+      {/* AI タブ */}
       <Tabs.Screen
         name="ideas"
         options={{
-          title: "企画提案",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="lightbulb.fill" color={color} />,
+          title: "AI",
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="brain.head.profile" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="early-stats"
-        options={{
-          title: "初速",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="clock.fill" color={color} />,
-        }}
-      />
+      {/* 設定タブ */}
       <Tabs.Screen
         name="settings"
         options={{
           title: "設定",
-          tabBarIcon: ({ color }) => <IconSymbol size={22} name="gear" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="gear" color={color} />,
         }}
       />
+      {/* 非表示タブ（YouTubeタブ内サブナビから呼ばれる） */}
+      <Tabs.Screen name="rankings" options={{ href: null }} />
+      <Tabs.Screen name="charts" options={{ href: null }} />
+      <Tabs.Screen name="videos" options={{ href: null }} />
+      <Tabs.Screen name="ai" options={{ href: null }} />
+      <Tabs.Screen name="early-stats" options={{ href: null }} />
     </Tabs>
   );
 }

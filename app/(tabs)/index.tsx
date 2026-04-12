@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, RefreshControl } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, RefreshControl, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Image } from "expo-image";
@@ -60,8 +60,93 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
   { key: 'short', label: 'ショート', color: '#3B82F6' },
 ];
 
+// ─── YouTube Sub-Nav ─────────────────────────────────────────────────────────
+type YoutubeTab = 'dashboard' | 'rankings' | 'charts' | 'videos' | 'ai' | 'early-stats';
+
+const YOUTUBE_TABS: { key: YoutubeTab; label: string }[] = [
+  { key: 'dashboard', label: 'ダッシュボード' },
+  { key: 'rankings', label: 'ランキング' },
+  { key: 'charts', label: 'グラフ' },
+  { key: 'videos', label: '動画一覧' },
+  { key: 'ai', label: 'AI分析' },
+  { key: 'early-stats', label: '初速' },
+];
+
+function YoutubeSubNav({ active, onChange }: { active: YoutubeTab; onChange: (t: YoutubeTab) => void }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={ytStyles.subNavContainer}
+      contentContainerStyle={ytStyles.subNavContent}
+    >
+      {YOUTUBE_TABS.map((t) => (
+        <TouchableOpacity
+          key={t.key}
+          onPress={() => onChange(t.key)}
+          style={[
+            ytStyles.subNavItem,
+            active === t.key && ytStyles.subNavItemActive,
+          ]}
+        >
+          <Text
+            style={[
+              ytStyles.subNavText,
+              active === t.key && ytStyles.subNavTextActive,
+            ]}
+          >
+            {t.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+const ytStyles = StyleSheet.create({
+  subNavContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5E5',
+    maxHeight: 44,
+  },
+  subNavContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subNavItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  subNavItemActive: {
+    backgroundColor: '#FF0000',
+  },
+  subNavText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#606060',
+  },
+  subNavTextActive: {
+    color: '#fff',
+  },
+});
+
+// ─── Lazy screen imports ──────────────────────────────────────────────────────
+import RankingsScreen from './rankings';
+import ChartsScreen from './charts';
+import VideosScreen from './videos';
+import AIScreen from './ai';
+import EarlyStatsScreen from './early-stats';
+
+// ─── Main YouTube Tab ─────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const router = useRouter();
+  const [youtubeTab, setYoutubeTab] = useState<YoutubeTab>('dashboard');
   const [refreshing, setRefreshing] = useState(false);
   const [videoFilter, setVideoFilter] = useState<VideoFilter>('all');
   const [channelConfig, setChannelConfig] = useState<ChannelConfig | null>(null);
@@ -252,8 +337,26 @@ export default function DashboardScreen() {
     }
   }, [utils]);
 
+  // サブ画面の場合はそれぞれの画面を返す。各画面が自分でScreenContainerを持つため、
+  // ここではViewでラップしてサブナビを先頭に挿入する
+  if (youtubeTab !== 'dashboard') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8F8F8' }}>
+        <YoutubeSubNav active={youtubeTab} onChange={setYoutubeTab} />
+        <View style={{ flex: 1 }}>
+          {youtubeTab === 'rankings' && <RankingsScreen />}
+          {youtubeTab === 'charts' && <ChartsScreen />}
+          {youtubeTab === 'videos' && <VideosScreen />}
+          {youtubeTab === 'ai' && <AIScreen />}
+          {youtubeTab === 'early-stats' && <EarlyStatsScreen />}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScreenContainer containerClassName="bg-[#F8F8F8]">
+      <YoutubeSubNav active={youtubeTab} onChange={setYoutubeTab} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 30 }}

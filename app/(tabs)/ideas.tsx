@@ -369,7 +369,7 @@ export default function IdeasScreen() {
       >
         <View>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            AI情報ダッシュボード
+            AIツールまとめ
           </Text>
           {reportDateStr ? (
             <Text style={[styles.headerSub, { color: colors.muted }]}>
@@ -435,9 +435,9 @@ export default function IdeasScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
             まだデータがありません
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.muted }]}>
-            「今すぐ生成する」を押すと、AIが最新情報を収集します。{"\n"}毎朝7時に自動更新されます。
-          </Text>
+            <Text style={[styles.emptyBody, { color: colors.muted }]}>
+              「今すぐ生成する」を押すと、AIツールの最新情報を収集します。{"\n"}毎朝7時に自動更新されます。
+            </Text>
           <TouchableOpacity
             style={[styles.generateBtn, { backgroundColor: colors.primary }]}
             onPress={handlePressGenerate}
