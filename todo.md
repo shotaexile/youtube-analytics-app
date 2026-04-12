@@ -275,3 +275,10 @@
 
 ## Round 42：タブバー余分表示修正（ユーザー報告）
 - [x] タブバーにrankings/charts/videos/ai/early-statsが余分に表示される問題を修正（href:nullで非表示）
+
+## Round 43：AIニュース日時・リンク表示・自動更新（ユーザー要望）
+- [x] AIニュースカードに記事発生日時を表示する
+- [x] AIニュースカードの記事リンクをai-gallery.jpの実際のURLに設定する
+- [x] 更新ボタンが動作しない原因を修正する（DBのreportDateにユニーク制約追加・重複データ削除）
+- [x] アプリ起動時に自動でAI情報を取得・表示する（refetchOnMount: true）
+- [x] 定期的（30分ごと）にバックグラウンドで自動更新する（refetchInterval: 30分）

@@ -26,6 +26,7 @@ interface NewsItem {
   impact: "high" | "medium" | "low";
   url?: string;
   sourceUrl?: string;
+  publishedAt?: string;
 }
 
 interface ToolItem {
@@ -85,6 +86,18 @@ function NewsCard({ item }: { item: NewsItem }) {
   const linkUrl = item.url ?? item.sourceUrl;
   const hasLink = !!linkUrl;
 
+  // Format publishedAt date for display
+  const dateStr = item.publishedAt
+    ? (() => {
+        try {
+          const d = new Date(item.publishedAt);
+          return d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+        } catch {
+          return item.publishedAt;
+        }
+      })()
+    : null;
+
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.cardHeader}>
@@ -92,6 +105,9 @@ function NewsCard({ item }: { item: NewsItem }) {
           <Text style={[styles.categoryText, { color: colors.primary }]}>{item.category}</Text>
         </View>
         <ImpactBadge impact={item.impact} />
+        {dateStr ? (
+          <Text style={[styles.dateText, { color: colors.muted }]}>{dateStr}</Text>
+        ) : null}
       </View>
       {hasLink ? (
         <TouchableOpacity onPress={() => openUrl(linkUrl)} activeOpacity={0.7}>
@@ -323,6 +339,8 @@ export default function IdeasScreen() {
   } = trpc.aiInfo.getLatestReport.useQuery(undefined, {
     staleTime: 0, // Always fetch fresh data on mount
     refetchOnMount: true,
+    refetchOnWindowFocus: true, // Refetch when app comes to foreground
+    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
 
   const generateMutation = trpc.aiInfo.generateReport.useMutation({
@@ -333,22 +351,25 @@ export default function IdeasScreen() {
     onSettled: () => setRefreshing(false),
   });
 
+  // Simple refresh: just refetch from DB (no password needed)
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await generateMutation.mutateAsync();
-    } catch {
+      await refetch();
+    } finally {
       setRefreshing(false);
     }
   };
 
+  // Admin-only: force regenerate from external sources (requires password)
   const handlePressGenerate = () => {
     setShowPasswordModal(true);
   };
 
   const handlePasswordSuccess = () => {
     setShowPasswordModal(false);
-    handleRefresh();
+    setRefreshing(true);
+    generateMutation.mutate();
   };
 
   const tabs: { key: Tab; label: string; emoji: string }[] = [
@@ -394,10 +415,10 @@ export default function IdeasScreen() {
         </View>
         <TouchableOpacity
           style={[styles.refreshBtn, { backgroundColor: colors.primary }]}
-          onPress={handlePressGenerate}
-          disabled={generateMutation.isPending || refreshing}
+          onPress={handleRefresh}
+          disabled={isLoading || refreshing}
         >
-          {generateMutation.isPending || refreshing ? (
+          {isLoading || refreshing ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <Text style={styles.refreshBtnText}>更新</Text>
@@ -469,7 +490,7 @@ export default function IdeasScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={handlePressGenerate}
+              onRefresh={handleRefresh}
               tintColor={colors.primary}
             />
           }
@@ -872,5 +893,9 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  dateText: {
+    fontSize: 10,
+    marginLeft: "auto" as unknown as number,
   },
 });

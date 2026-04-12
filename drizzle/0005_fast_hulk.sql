@@ -1,0 +1,1 @@
+ALTER TABLE `ai_daily_report` ADD CONSTRAINT `ai_daily_report_reportDate_unique` UNIQUE(`reportDate`);

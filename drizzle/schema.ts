@@ -152,7 +152,7 @@ export type InsertVideoEarlyStats = typeof videoEarlyStats.$inferInsert;
  */
 export const aiDailyReport = mysqlTable("ai_daily_report", {
   id: int("id").autoincrement().primaryKey(),
-  reportDate: date("reportDate").notNull(),
+  reportDate: date("reportDate").notNull().unique(),
   // JSON string: { title, summary, source, category }[]
   latestNews: text("latestNews"),
   // JSON string: { rank, toolName, category, description, examples }[]
