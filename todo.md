@@ -301,3 +301,6 @@
 - [x] ledge.aiスクレイピング関数をサーバーに追加（fetchLedgeAiNews）
 - [x] DBスキーマにinfoSourcesテーブルとledgeNewsカラムを追加・マイグレーション実行
 - [x] 情報ソースCRUD（getInfoSources・addInfoSource・updateInfoSourceMemo・deleteInfoSource）をサーバーに追加
+
+## Round 46：AIサブナビ下部配置（ユーザー要望）
+- [x] AIタブのサブナビをYouTubeタブと同様に画面下部（メインタブバーの上）に配置する

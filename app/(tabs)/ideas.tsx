@@ -18,6 +18,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
+import { useAiSubNav } from "@/lib/ai-subnav-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -651,7 +652,7 @@ type Tab = "articles" | "news" | "rankings" | "tools" | "sources";
 
 export default function IdeasScreen() {
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<Tab>("articles");
+  const { activeTab } = useAiSubNav();
   const [refreshing, setRefreshing] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [rankingFilter, setRankingFilter] = useState<string | null>(null);
@@ -720,14 +721,6 @@ export default function IdeasScreen() {
     ]);
   };
 
-  const tabs: { key: Tab; label: string; emoji: string }[] = [
-    { key: "articles", label: "最新記事", emoji: "📰" },
-    { key: "news", label: "最新ニュース", emoji: "📡" },
-    { key: "rankings", label: "ツール比較", emoji: "🏆" },
-    { key: "tools", label: "ツール一覧", emoji: "🛠️" },
-    { key: "sources", label: "情報ソース", emoji: "📚" },
-  ];
-
   const latestNews: NewsItem[] = (report?.latestNews as NewsItem[]) ?? [];
   const ledgeNews: LedgeNewsItem[] = (report?.ledgeNews as LedgeNewsItem[]) ?? [];
   const toolRankings: RankingCategory[] = (report?.toolRankings as RankingCategory[]) ?? [];
@@ -773,29 +766,6 @@ export default function IdeasScreen() {
           )}
         </TouchableOpacity>
       </View>
-
-      {/* Tab Bar - horizontal scroll */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[styles.tabBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
-        contentContainerStyle={styles.tabBarContent}
-      >
-        {tabs.map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            style={[
-              styles.tabItem,
-              activeTab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
-            ]}
-            onPress={() => setActiveTab(t.key)}
-          >
-            <Text style={[styles.tabText, { color: activeTab === t.key ? colors.primary : colors.muted }]}>
-              {t.emoji} {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
       {/* Content */}
       {isLoading && (activeTab === "articles" || activeTab === "news" || activeTab === "rankings") ? (
@@ -1051,25 +1021,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 13,
   },
-  tabBar: {
-    borderBottomWidth: 0.5,
-    flexGrow: 0,
-  },
-  tabBarContent: {
-    paddingHorizontal: 4,
-  },
-  tabItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabText: {
-    fontSize: 11,
-    fontWeight: "600",
-    whiteSpace: "nowrap",
-  } as never,
   scrollContent: {
     padding: 16,
     paddingBottom: 40,

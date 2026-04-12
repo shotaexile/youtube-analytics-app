@@ -24,6 +24,7 @@ import { usePushNotificationSetup } from "@/lib/data/use-push-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { YoutubeSubNavProvider } from "@/lib/youtube-subnav-context";
+import { AiSubNavProvider } from "@/lib/ai-subnav-context";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -465,6 +466,7 @@ function RootLayoutInner() {
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <YoutubeSubNavProvider>
+      <AiSubNavProvider>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <PushNotificationSetup />
@@ -480,6 +482,7 @@ function RootLayoutInner() {
         </QueryClientProvider>
       </trpc.Provider>
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+      </AiSubNavProvider>
       </YoutubeSubNavProvider>
     </GestureHandlerRootView>
   );

@@ -5,6 +5,7 @@ import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useYoutubeSubNav, YoutubeTab } from "@/lib/youtube-subnav-context";
+import { useAiSubNav, AiTab } from "@/lib/ai-subnav-context";
 
 function getWebBottomInset(): number {
   if (typeof window === "undefined" || typeof document === "undefined") return 0;
@@ -16,6 +17,14 @@ function getWebBottomInset(): number {
   }
 }
 
+const AI_SUBNAV_TABS: { key: AiTab; label: string; icon: string }[] = [
+  { key: 'articles', label: '最新記事', icon: '📰' },
+  { key: 'news', label: '最新ニュース', icon: '📡' },
+  { key: 'rankings', label: 'ツール比較', icon: '🏆' },
+  { key: 'tools', label: 'ツール一覧', icon: '🛠️' },
+  { key: 'sources', label: '情報ソース', icon: '📚' },
+];
+
 const YOUTUBE_TABS: { key: YoutubeTab; label: string; icon: string }[] = [
   { key: 'dashboard', label: 'TOP', icon: '🏠' },
   { key: 'rankings', label: 'ランキング', icon: '🏆' },
@@ -24,6 +33,45 @@ const YOUTUBE_TABS: { key: YoutubeTab; label: string; icon: string }[] = [
   { key: 'ai', label: 'AI分析', icon: '🤖' },
   { key: 'early-stats', label: '初速', icon: '⚡' },
 ];
+
+function AiSubNavBar() {
+  const { activeTab, setActiveTab } = useAiSubNav();
+  const colors = useColors();
+
+  return (
+    <View style={[subNavStyles.wrapper, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={subNavStyles.content}
+      >
+        {AI_SUBNAV_TABS.map((t) => {
+          const isActive = activeTab === t.key;
+          return (
+            <TouchableOpacity
+              key={t.key}
+              onPress={() => setActiveTab(t.key)}
+              style={[
+                subNavStyles.item,
+                isActive && subNavStyles.itemActive,
+              ]}
+            >
+              <Text style={subNavStyles.icon}>{t.icon}</Text>
+              <Text
+                style={[
+                  subNavStyles.label,
+                  isActive && subNavStyles.labelActive,
+                ]}
+              >
+                {t.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
 
 function YoutubeSubNavBar() {
   const { activeTab, setActiveTab } = useYoutubeSubNav();
@@ -105,6 +153,7 @@ function CustomTabBar(props: any) {
   // Check if current route is the YouTube (index) tab
   const currentRoute = props.state?.routes?.[props.state?.index]?.name;
   const isOnYoutubeTab = currentRoute === 'index';
+  const isOnAiTab = currentRoute === 'ideas';
 
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -115,6 +164,7 @@ function CustomTabBar(props: any) {
   return (
     <View style={{ backgroundColor: colors.background }}>
       {isOnYoutubeTab && <YoutubeSubNavBar />}
+      {isOnAiTab && <AiSubNavBar />}
       <View
         style={{
           height: CONTENT_HEIGHT + bottomInset,
@@ -122,7 +172,7 @@ function CustomTabBar(props: any) {
           paddingBottom: bottomInset,
           backgroundColor: colors.background,
           borderTopColor: colors.border,
-          borderTopWidth: isOnYoutubeTab ? 0 : 0.5,
+          borderTopWidth: (isOnYoutubeTab || isOnAiTab) ? 0 : 0.5,
           flexDirection: 'row',
         }}
       >
