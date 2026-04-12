@@ -755,6 +755,7 @@ ${trendContext}
       impressions: z.number().min(0),
       ctr: z.number().min(0),
       avgViewRate: z.number().min(0),
+      avgWatchTimeSec: z.number().min(0).optional().default(0),
       likeRate: z.number().min(0),
     }))
     .mutation(async ({ input }) => {
@@ -769,6 +770,7 @@ ${trendContext}
           impressions: input.impressions,
           ctr: input.ctr,
           avgViewRate: input.avgViewRate,
+          avgWatchTimeSec: input.avgWatchTimeSec ?? 0,
           likeRate: input.likeRate,
         })
         .onDuplicateKeyUpdate({
@@ -777,6 +779,7 @@ ${trendContext}
             impressions: input.impressions,
             ctr: input.ctr,
             avgViewRate: input.avgViewRate,
+            avgWatchTimeSec: input.avgWatchTimeSec ?? 0,
             likeRate: input.likeRate,
           },
         });
@@ -801,7 +804,7 @@ ${trendContext}
   getAllEarlyStats: publicProcedure
     .input(z.object({
       timeWindow: z.enum(["1h", "24h", "48h", "1week"]).optional(),
-      sortBy: z.enum(["views", "impressions", "ctr", "avgViewRate", "likeRate"]).optional(),
+      sortBy: z.enum(["views", "impressions", "ctr", "avgViewRate", "avgWatchTimeSec", "likeRate"]).optional(),
       limit: z.number().min(1).max(200).optional(),
     }))
     .query(async ({ input }) => {
@@ -819,6 +822,7 @@ ${trendContext}
           impressions: videoEarlyStats.impressions,
           ctr: videoEarlyStats.ctr,
           avgViewRate: videoEarlyStats.avgViewRate,
+          avgWatchTimeSec: videoEarlyStats.avgWatchTimeSec,
           likeRate: videoEarlyStats.likeRate,
           recordedAt: videoEarlyStats.recordedAt,
           title: videos.title,

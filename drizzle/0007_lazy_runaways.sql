@@ -1,0 +1,1 @@
+ALTER TABLE `video_early_stats` ADD `avgWatchTimeSec` int DEFAULT 0 NOT NULL;

@@ -139,6 +139,7 @@ export const videoEarlyStats = mysqlTable("video_early_stats", {
   impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
   ctr: float("ctr").notNull().default(0),
   avgViewRate: float("avgViewRate").notNull().default(0),
+  avgWatchTimeSec: int("avgWatchTimeSec").notNull().default(0),
   likeRate: float("likeRate").notNull().default(0),
   recordedAt: timestamp("recordedAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

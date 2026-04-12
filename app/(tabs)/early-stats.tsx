@@ -24,7 +24,7 @@ import { Colors } from "@/constants/theme";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TimeWindow = "1h" | "24h" | "48h" | "1week";
-type SortMetric = "views" | "impressions" | "ctr" | "avgViewRate" | "likeRate";
+type SortMetric = "views" | "impressions" | "ctr" | "avgWatchTimeSec" | "likeRate";
 
 const TIME_WINDOWS: { key: TimeWindow; label: string }[] = [
   { key: "1h", label: "1時間" },
@@ -37,7 +37,7 @@ const SORT_METRICS: { key: SortMetric; label: string; unit: string }[] = [
   { key: "views", label: "視聴回数", unit: "回" },
   { key: "impressions", label: "インプレ", unit: "" },
   { key: "ctr", label: "CTR", unit: "%" },
-  { key: "avgViewRate", label: "平均視聴率", unit: "%" },
+  { key: "avgWatchTimeSec", label: "平均視聴時間", unit: "秒" },
   { key: "likeRate", label: "高評価率", unit: "%" },
 ];
 
@@ -49,6 +49,7 @@ interface EarlyStatRow {
   impressions: number;
   ctr: number;
   avgViewRate: number;
+  avgWatchTimeSec: number;
   likeRate: number;
   recordedAt: string | Date;
   title: string | null;
@@ -61,16 +62,15 @@ interface InputFormState {
   views: string;
   impressions: string;
   ctr: string;
-  avgViewRate: string;
+  avgWatchTimeSec: string;
   likeRate: string;
-  avgWatchTime?: string; // 削除対象フィールド（24時間のみ）
 }
 
 const EMPTY_FORM: InputFormState = {
   views: "",
   impressions: "",
   ctr: "",
-  avgViewRate: "",
+  avgWatchTimeSec: "",
   likeRate: "",
 };
 
@@ -87,7 +87,7 @@ function EarlyStatsInputModal({
   visible: boolean;
   videoId: string;
   videoTitle: string;
-  existingStats: { timeWindow: TimeWindow; views: number; impressions: number; ctr: number; avgViewRate: number; likeRate: number }[];
+  existingStats: { timeWindow: TimeWindow; views: number; impressions: number; ctr: number; avgViewRate: number; avgWatchTimeSec: number; likeRate: number }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -116,7 +116,7 @@ function EarlyStatsInputModal({
         views: s.views > 0 ? String(s.views) : "",
         impressions: s.impressions > 0 ? String(s.impressions) : "",
         ctr: s.ctr > 0 ? String(s.ctr) : "",
-        avgViewRate: s.avgViewRate > 0 ? String(s.avgViewRate) : "",
+        avgWatchTimeSec: (s.avgWatchTimeSec ?? 0) > 0 ? String(s.avgWatchTimeSec) : "",
         likeRate: s.likeRate > 0 ? String(s.likeRate) : "",
       };
     }
@@ -137,7 +137,7 @@ function EarlyStatsInputModal({
         const views = parseInt(form.views) || 0;
         const impressions = parseInt(form.impressions) || 0;
         const ctr = parseFloat(form.ctr) || 0;
-        const avgViewRate = parseFloat(form.avgViewRate) || 0;
+        const avgWatchTimeSec = parseInt(form.avgWatchTimeSec) || 0;
         const likeRate = parseFloat(form.likeRate) || 0;
 
         if (views > 0 || impressions > 0) {
@@ -148,7 +148,8 @@ function EarlyStatsInputModal({
               views,
               impressions,
               ctr,
-              avgViewRate,
+              avgViewRate: 0,
+              avgWatchTimeSec,
               likeRate,
             });
           } catch (e) {
@@ -275,20 +276,17 @@ function EarlyStatsInputModal({
             iconColor="#F59E0B"
             hint="YouTube Studioに表示されている%の数値をそのまま入力"
           />
-          {/* 1時間の場合は平均視聴率を非表示 */}
-          {activeWindow !== "1h" && (
-            <InputField
-              label="平均視聴率 %"
-              value={currentForm.avgViewRate}
-              onChangeText={v => updateField(activeWindow, "avgViewRate", v)}
-              placeholder="例: 42.3"
-              keyboardType="decimal-pad"
-              icon="chart.line.uptrend.xyaxis"
-              iconColor="#22C55E"
-              hint="YouTube Studioに表示されている%の数値をそのまま入力"
-              colors={colors}
-            />
-          )}
+          <InputField
+            label="平均視聴時間（秒）"
+            value={currentForm.avgWatchTimeSec}
+            onChangeText={v => updateField(activeWindow, "avgWatchTimeSec", v)}
+            placeholder="例: 185"
+            keyboardType="numeric"
+            icon="clock.fill"
+            iconColor="#22C55E"
+            hint="YouTube Studioに表示されている平均視聴時間を秒数で入力（例: 3分5秒 → 185）"
+            colors={colors}
+          />
           <InputField
             label="高評価率 %"
             value={currentForm.likeRate}
@@ -371,7 +369,13 @@ function RankingRow({ item, rank, sortMetric }: { item: EarlyStatRow; rank: numb
       case "views": return formatNumber(item.views);
       case "impressions": return formatNumber(item.impressions);
       case "ctr": return `${item.ctr.toFixed(1)}%`;
-      case "avgViewRate": return `${item.avgViewRate.toFixed(1)}%`;
+      case "avgWatchTimeSec": {
+        const sec = item.avgWatchTimeSec ?? 0;
+        if (sec <= 0) return "-";
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+      }
       case "likeRate": return `${item.likeRate.toFixed(1)}%`;
     }
   };
