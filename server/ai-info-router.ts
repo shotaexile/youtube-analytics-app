@@ -35,7 +35,8 @@ async function fetchAiGalleryNews(): Promise<Array<{
   publishedAt: string;
 }>> {
   // Category 495 = 生成AIニュース, 400 = 生成AIツール, 318 = 生成AI基本知識
-  const categoryIds = [495, 400, 318];
+  // Category 319 = 生成AI活用事例, 1 = ChatGPT特集
+  const categoryIds = [495, 400, 319, 1, 318];
   const allPosts: Array<{
     title: string;
     summary: string;
@@ -59,8 +60,8 @@ async function fetchAiGalleryNews(): Promise<Array<{
         excerpt: { rendered: string };
       }>;
 
-      const catName = catId === 495 ? "AIニュース" : catId === 400 ? "AIツール" : "AI基礎知識";
-      const impact: "high" | "medium" | "low" = catId === 495 ? "high" : catId === 400 ? "medium" : "low";
+      const catName = catId === 495 ? "AIニュース" : catId === 400 ? "AIツール" : catId === 319 ? "AI活用事例" : catId === 1 ? "ChatGPT" : "AI基礎知識";
+      const impact: "high" | "medium" | "low" = catId === 495 ? "high" : catId === 400 || catId === 319 ? "medium" : "low";
 
       for (const post of posts) {
         const title = stripHtml(post.title.rendered);
@@ -79,12 +80,12 @@ async function fetchAiGalleryNews(): Promise<Array<{
     }
   }
 
-  // Deduplicate by URL and return latest 10
+  // Deduplicate by URL and return latest 15
   const seen = new Set<string>();
   return allPosts
     .filter((p) => { if (seen.has(p.url)) return false; seen.add(p.url); return true; })
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-    .slice(0, 10);
+    .slice(0, 15);
 }
 
 // ─── Artificial Analysis Rankings ─────────────────────────────────────────────
@@ -130,6 +131,104 @@ function parseAaDataBlock(html: string, fieldName: string): AaModel[] {
     items.push(item);
   }
   return items;
+}
+
+/**
+ * Parse image/video model ELO rankings from Artificial Analysis media pages.
+ * The HTML uses escaped JSON: \"name\":\"ModelName\",...\"elos\":[{\"elo\":1234.56}]
+ */
+async function fetchAaMediaRankings(mediaType: "image" | "video"): Promise<Array<{
+  rank: number;
+  toolName: string;
+  description: string;
+  bestFor: string;
+  url: string;
+  score?: string;
+}>> {
+  const pageUrl = mediaType === "image"
+    ? "https://artificialanalysis.ai/text-to-image"
+    : "https://artificialanalysis.ai/video";
+
+  let html = "";
+  try {
+    const res = await fetch(pageUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+
+  if (!html || html.length < 10000) return [];
+
+  // Extract model family names with their ELO scores
+  // Pattern in HTML: \"name\":\"ModelName\",...\"elos\":[{\"elo\":1234.56,...}]
+  const urlPrefix = mediaType === "image" ? "/image/model-families/" : "/video/model-families/";
+  const baseUrl = "https://artificialanalysis.ai";
+
+  // Find all occurrences of name + url + elos pattern
+  const entryPattern = /\\"name\\":\\"([^\\]+)\\"[^}]{0,300}\\"url\\":\\"(\/(?:image|video)\/model-families\/[^\\]+)\\"[^}]{0,500}\\"elos\\":\[\{\\"elo\\":([\.\d]+)/g;
+  const seen = new Map<string, { elo: number; url: string }>();
+  let m: RegExpExecArray | null;
+  while ((m = entryPattern.exec(html)) !== null) {
+    const name = m[1];
+    const urlPath = m[2];
+    const elo = parseFloat(m[3]);
+    if (!seen.has(name) || seen.get(name)!.elo < elo) {
+      seen.set(name, { elo, url: urlPath });
+    }
+  }
+
+  if (seen.size === 0) return [];
+
+  const sorted = Array.from(seen.entries())
+    .sort((a, b) => b[1].elo - a[1].elo)
+    .slice(0, 8);
+
+  // Model descriptions for well-known image/video AI tools
+  const imageDescriptions: Record<string, { desc: string; bestFor: string }> = {
+    "Midjourney": { desc: "高品質アート生成の定番ツール", bestFor: "芸術的・高品質な画像生成" },
+    "OpenAI GPT": { desc: "OpenAIのGPT-4o画像生成", bestFor: "テキスト付き画像・汎用生成" },
+    "Gemini": { desc: "GoogleのImagen搭載モデル", bestFor: "リアルな写真・多様なスタイル" },
+    "Riverflow": { desc: "高速・高品質な画像生成", bestFor: "商用利用・高速生成" },
+    "FLUX": { desc: "Black Forestの高品質オープンモデル", bestFor: "リアル写真・ファインチューニング" },
+    "Ideogram": { desc: "テキスト描画が得意な画像生成AI", bestFor: "ロゴ・テキスト入り画像" },
+    "Recraft": { desc: "デザイン特化の画像生成AI", bestFor: "UI/UX・ベクターデザイン" },
+    "Seedream": { desc: "バイトダンス発の高品質モデル", bestFor: "アニメ・イラスト生成" },
+    "Adobe Firefly": { desc: "Adobeの商用安全な画像生成AI", bestFor: "商用利用・著作権フリー" },
+    "Imagen": { desc: "Google DeepMindの画像生成モデル", bestFor: "リアルな写真生成" },
+  };
+  const videoDescriptions: Record<string, { desc: string; bestFor: string }> = {
+    "Kling": { desc: "Kuaishouの高品質動画生成AI", bestFor: "リアルな動画・長尺生成" },
+    "Sora": { desc: "OpenAIの革新的動画生成AI", bestFor: "高品質・長尺動画生成" },
+    "Runway": { desc: "プロ向け動画生成・編集AI", bestFor: "映像制作・エフェクト" },
+    "Pika": { desc: "高速動画生成のスタートアップ", bestFor: "短尺・クリエイティブ動画" },
+    "Veo": { desc: "GoogleのDeepMind動画生成AI", bestFor: "高品質・映画的動画" },
+    "Wan": { desc: "Alibabaの動画生成モデル", bestFor: "中国語コンテンツ・汎用" },
+    "HunyuanVideo": { desc: "Tencentの高品質動画生成AI", bestFor: "リアル動画・長尺生成" },
+    "LTX": { desc: "Lightricks製の高速動画生成", bestFor: "高速・低コスト動画生成" },
+    "CogVideoX": { desc: "清華大学発のオープン動画AI", bestFor: "オープンソース・カスタマイズ" },
+  };
+  const descMap = mediaType === "image" ? imageDescriptions : videoDescriptions;
+
+  function getMediaInfo(name: string): { desc: string; bestFor: string } {
+    for (const [key, info] of Object.entries(descMap)) {
+      if (name.includes(key)) return info;
+    }
+    return { desc: `${mediaType === "image" ? "画像" : "動画"}生成AIモデル`, bestFor: "高品質コンテンツ生成" };
+  }
+
+  return sorted.map(([name, { elo, url }], i) => {
+    const info = getMediaInfo(name);
+    return {
+      rank: i + 1,
+      toolName: name,
+      description: info.desc,
+      bestFor: info.bestFor,
+      url: `${baseUrl}${url}`,
+      score: `ELO: ${elo.toFixed(0)}`,
+    };
+  });
 }
 
 /** Fetch and parse Artificial Analysis rankings directly from HTML */
@@ -238,6 +337,26 @@ async function fetchArtificialAnalysisRankings(): Promise<Array<{
     rankings.push({
       category: "💰 LLMコスパランキング（Price/M tokens）",
       tools: toToolList(priceModels, "pricePerMillionTokens", "価格", "$/M"),
+    });
+  }
+
+  // Fetch image and video rankings from dedicated pages
+  const [imageModels, videoModels] = await Promise.all([
+    fetchAaMediaRankings("image"),
+    fetchAaMediaRankings("video"),
+  ]);
+
+  if (imageModels.length > 0) {
+    rankings.push({
+      category: "🖼️ 画像生成ランキング（ELOスコア）",
+      tools: imageModels,
+    });
+  }
+
+  if (videoModels.length > 0) {
+    rankings.push({
+      category: "🎬 動画生成ランキング（ELOスコア）",
+      tools: videoModels,
     });
   }
 
