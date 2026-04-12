@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "",
+  "buildCommand": "pnpm build:web && pnpm build:server",
   "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
