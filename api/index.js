@@ -35,6 +35,7 @@ __export(handler_exports, {
 module.exports = __toCommonJS(handler_exports);
 var import_config = require("dotenv/config");
 var import_express = __toESM(require("express"));
+var import_path = __toESM(require("path"));
 var import_express2 = require("@trpc/server/adapters/express");
 
 // shared/const.ts
@@ -2409,4 +2410,13 @@ app.use(
     createContext
   })
 );
+var distPath = import_path.default.join(__dirname, "../dist");
+app.use(import_express.default.static(distPath));
+app.get("*", (req, res) => {
+  if (!req.path.startsWith("/api/")) {
+    res.sendFile(import_path.default.join(distPath, "index.html"));
+  } else {
+    res.status(404).json({ error: "Not Found" });
+  }
+});
 var handler_default = app;
