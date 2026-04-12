@@ -37,7 +37,7 @@ const SORT_METRICS: { key: SortMetric; label: string; unit: string }[] = [
   { key: "views", label: "視聴回数", unit: "回" },
   { key: "impressions", label: "インプレ", unit: "" },
   { key: "ctr", label: "CTR", unit: "%" },
-  { key: "avgWatchTimeSec", label: "平均視聴時間", unit: "秒" },
+  { key: "avgWatchTimeSec", label: "平均視聴率", unit: "%" },
   { key: "likeRate", label: "高評価率", unit: "%" },
 ];
 
@@ -56,6 +56,7 @@ interface EarlyStatRow {
   publishedAt: string | null;
   isShort: boolean | null;
   finalViews: number | null;
+  duration: number | null;
 }
 
 interface InputFormState {
@@ -371,10 +372,10 @@ function RankingRow({ item, rank, sortMetric }: { item: EarlyStatRow; rank: numb
       case "ctr": return `${item.ctr.toFixed(1)}%`;
       case "avgWatchTimeSec": {
         const sec = item.avgWatchTimeSec ?? 0;
-        if (sec <= 0) return "-";
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+        const dur = item.duration ?? 0;
+        if (sec <= 0 || dur <= 0) return "-";
+        const pct = Math.min((sec / dur) * 100, 100);
+        return `${pct.toFixed(1)}%`;
       }
       case "likeRate": return `${item.likeRate.toFixed(1)}%`;
     }

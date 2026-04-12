@@ -9,6 +9,7 @@ import {
   bigint,
   boolean,
   date,
+  uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
 /**
@@ -143,7 +144,9 @@ export const videoEarlyStats = mysqlTable("video_early_stats", {
   likeRate: float("likeRate").notNull().default(0),
   recordedAt: timestamp("recordedAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  uqVideoTimeWindow: uniqueIndex("uq_video_timewindow").on(table.videoId, table.timeWindow),
+}));
 export type VideoEarlyStatsRow = typeof videoEarlyStats.$inferSelect;
 export type InsertVideoEarlyStats = typeof videoEarlyStats.$inferInsert;
 

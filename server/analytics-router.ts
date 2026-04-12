@@ -829,6 +829,7 @@ ${trendContext}
           publishedAt: videos.publishedAt,
           isShort: videos.isShort,
           finalViews: videos.views,
+          duration: videos.duration,
         })
         .from(videoEarlyStats)
         .leftJoin(videos, eq(videoEarlyStats.videoId, videos.videoId))

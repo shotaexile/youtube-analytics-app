@@ -133,7 +133,9 @@ var videoEarlyStats = (0, import_mysql_core.mysqlTable)("video_early_stats", {
   likeRate: (0, import_mysql_core.float)("likeRate").notNull().default(0),
   recordedAt: (0, import_mysql_core.timestamp)("recordedAt").defaultNow().notNull(),
   updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
-});
+}, (table) => ({
+  uqVideoTimeWindow: (0, import_mysql_core.uniqueIndex)("uq_video_timewindow").on(table.videoId, table.timeWindow)
+}));
 var aiDailyReport = (0, import_mysql_core.mysqlTable)("ai_daily_report", {
   id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
   reportDate: (0, import_mysql_core.date)("reportDate").notNull().unique(),
@@ -1582,7 +1584,8 @@ ${trendContext}
       title: videos.title,
       publishedAt: videos.publishedAt,
       isShort: videos.isShort,
-      finalViews: videos.views
+      finalViews: videos.views,
+      duration: videos.duration
     }).from(videoEarlyStats).leftJoin(videos, (0, import_drizzle_orm2.eq)(videoEarlyStats.videoId, videos.videoId)).where((0, import_drizzle_orm2.eq)(videoEarlyStats.timeWindow, tw)).orderBy((0, import_drizzle_orm2.desc)(videoEarlyStats.views)).limit(limit);
     return rows;
   }),

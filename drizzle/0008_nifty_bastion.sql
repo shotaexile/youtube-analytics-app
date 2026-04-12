@@ -1,0 +1,1 @@
+ALTER TABLE `video_early_stats` ADD CONSTRAINT `uq_video_timewindow` UNIQUE(`videoId`,`timeWindow`);
