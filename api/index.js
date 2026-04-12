@@ -1,9 +1,41 @@
-// server/_core/index.ts
-import "dotenv/config";
-import express from "express";
-import { createServer } from "http";
-import net from "net";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc3) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc3 = __getOwnPropDesc(from, key)) || desc3.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// api/handler.ts
+var handler_exports = {};
+__export(handler_exports, {
+  default: () => handler_default
+});
+module.exports = __toCommonJS(handler_exports);
+var import_config = require("dotenv/config");
+var import_express = __toESM(require("express"));
+var import_express2 = require("@trpc/server/adapters/express");
 
 // shared/const.ts
 var COOKIE_NAME = "app_session_id";
@@ -13,115 +45,117 @@ var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 
 // server/db.ts
-import { eq, desc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+var import_drizzle_orm = require("drizzle-orm");
+var import_mysql2 = require("drizzle-orm/mysql2");
 
 // drizzle/schema.ts
-import {
-  int,
-  mysqlEnum,
-  mysqlTable,
-  text,
-  timestamp,
-  varchar,
-  float,
-  bigint,
-  boolean,
-  date
-} from "drizzle-orm/mysql-core";
-var users = mysqlTable("users", {
+var import_mysql_core = require("drizzle-orm/mysql-core");
+var users = (0, import_mysql_core.mysqlTable)("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
    * Use this for relations between tables.
    */
-  id: int("id").autoincrement().primaryKey(),
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
   /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
+  openId: (0, import_mysql_core.varchar)("openId", { length: 64 }).notNull().unique(),
+  name: (0, import_mysql_core.text)("name"),
+  email: (0, import_mysql_core.varchar)("email", { length: 320 }),
+  loginMethod: (0, import_mysql_core.varchar)("loginMethod", { length: 64 }),
+  role: (0, import_mysql_core.mysqlEnum)("role", ["user", "admin"]).default("user").notNull(),
+  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: (0, import_mysql_core.timestamp)("lastSignedIn").defaultNow().notNull()
 });
-var channelConfig = mysqlTable("channel_config", {
-  id: int("id").autoincrement().primaryKey(),
-  channelName: varchar("channelName", { length: 255 }).notNull().default("ViewCore"),
-  channelUrl: varchar("channelUrl", { length: 512 }).default(""),
-  channelId: varchar("channelId", { length: 128 }).default(""),
-  iconUrl: text("iconUrl"),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var channelConfig = (0, import_mysql_core.mysqlTable)("channel_config", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  channelName: (0, import_mysql_core.varchar)("channelName", { length: 255 }).notNull().default("ViewCore"),
+  channelUrl: (0, import_mysql_core.varchar)("channelUrl", { length: 512 }).default(""),
+  channelId: (0, import_mysql_core.varchar)("channelId", { length: 128 }).default(""),
+  iconUrl: (0, import_mysql_core.text)("iconUrl"),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var videos = mysqlTable("videos", {
-  id: int("id").autoincrement().primaryKey(),
-  videoId: varchar("videoId", { length: 64 }).notNull().unique(),
-  title: varchar("title", { length: 512 }).notNull(),
-  publishedAt: varchar("publishedAt", { length: 32 }).notNull(),
-  publishedDate: date("publishedDate").notNull(),
-  duration: int("duration").notNull().default(0),
-  views: bigint("views", { mode: "number" }).notNull().default(0),
-  estimatedRevenue: float("estimatedRevenue").notNull().default(0),
-  impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
-  ctr: float("ctr").notNull().default(0),
-  avgViewRate: float("avgViewRate").notNull().default(0),
-  likeRate: float("likeRate").notNull().default(0),
-  subscriberChange: int("subscriberChange").notNull().default(0),
-  isShort: boolean("isShort").notNull().default(false),
-  isPrivate: boolean("isPrivate").notNull().default(false),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var videos = (0, import_mysql_core.mysqlTable)("videos", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  videoId: (0, import_mysql_core.varchar)("videoId", { length: 64 }).notNull().unique(),
+  title: (0, import_mysql_core.varchar)("title", { length: 512 }).notNull(),
+  publishedAt: (0, import_mysql_core.varchar)("publishedAt", { length: 32 }).notNull(),
+  publishedDate: (0, import_mysql_core.date)("publishedDate").notNull(),
+  duration: (0, import_mysql_core.int)("duration").notNull().default(0),
+  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
+  estimatedRevenue: (0, import_mysql_core.float)("estimatedRevenue").notNull().default(0),
+  impressions: (0, import_mysql_core.bigint)("impressions", { mode: "number" }).notNull().default(0),
+  ctr: (0, import_mysql_core.float)("ctr").notNull().default(0),
+  avgViewRate: (0, import_mysql_core.float)("avgViewRate").notNull().default(0),
+  likeRate: (0, import_mysql_core.float)("likeRate").notNull().default(0),
+  subscriberChange: (0, import_mysql_core.int)("subscriberChange").notNull().default(0),
+  isShort: (0, import_mysql_core.boolean)("isShort").notNull().default(false),
+  isPrivate: (0, import_mysql_core.boolean)("isPrivate").notNull().default(false),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var monthlyStats = mysqlTable("monthly_stats", {
-  id: int("id").autoincrement().primaryKey(),
-  month: varchar("month", { length: 7 }).notNull().unique(),
-  views: bigint("views", { mode: "number" }).notNull().default(0),
-  revenue: float("revenue").notNull().default(0),
-  videoCount: int("videoCount").notNull().default(0),
-  subscriberChange: int("subscriberChange").notNull().default(0),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var monthlyStats = (0, import_mysql_core.mysqlTable)("monthly_stats", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  month: (0, import_mysql_core.varchar)("month", { length: 7 }).notNull().unique(),
+  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
+  revenue: (0, import_mysql_core.float)("revenue").notNull().default(0),
+  videoCount: (0, import_mysql_core.int)("videoCount").notNull().default(0),
+  subscriberChange: (0, import_mysql_core.int)("subscriberChange").notNull().default(0),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var csvUploads = mysqlTable("csv_uploads", {
-  id: int("id").autoincrement().primaryKey(),
-  uploadedBy: varchar("uploadedBy", { length: 64 }),
-  videoCount: int("videoCount").notNull().default(0),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
+var csvUploads = (0, import_mysql_core.mysqlTable)("csv_uploads", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  uploadedBy: (0, import_mysql_core.varchar)("uploadedBy", { length: 64 }),
+  videoCount: (0, import_mysql_core.int)("videoCount").notNull().default(0),
+  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull()
 });
-var adminSettings = mysqlTable("admin_settings", {
-  id: int("id").autoincrement().primaryKey(),
-  settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
-  settingValue: text("settingValue"),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var adminSettings = (0, import_mysql_core.mysqlTable)("admin_settings", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  settingKey: (0, import_mysql_core.varchar)("settingKey", { length: 128 }).notNull().unique(),
+  settingValue: (0, import_mysql_core.text)("settingValue"),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var pushTokens = mysqlTable("push_tokens", {
-  id: int("id").autoincrement().primaryKey(),
-  token: varchar("token", { length: 512 }).notNull().unique(),
-  deviceName: varchar("deviceName", { length: 128 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var pushTokens = (0, import_mysql_core.mysqlTable)("push_tokens", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  token: (0, import_mysql_core.varchar)("token", { length: 512 }).notNull().unique(),
+  deviceName: (0, import_mysql_core.varchar)("deviceName", { length: 128 }),
+  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var videoEarlyStats = mysqlTable("video_early_stats", {
-  id: int("id").autoincrement().primaryKey(),
-  videoId: varchar("videoId", { length: 64 }).notNull(),
-  timeWindow: mysqlEnum("timeWindow", ["1h", "24h", "48h", "1week"]).notNull(),
-  views: bigint("views", { mode: "number" }).notNull().default(0),
-  impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
-  ctr: float("ctr").notNull().default(0),
-  avgViewRate: float("avgViewRate").notNull().default(0),
-  likeRate: float("likeRate").notNull().default(0),
-  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+var videoEarlyStats = (0, import_mysql_core.mysqlTable)("video_early_stats", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  videoId: (0, import_mysql_core.varchar)("videoId", { length: 64 }).notNull(),
+  timeWindow: (0, import_mysql_core.mysqlEnum)("timeWindow", ["1h", "24h", "48h", "1week"]).notNull(),
+  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
+  impressions: (0, import_mysql_core.bigint)("impressions", { mode: "number" }).notNull().default(0),
+  ctr: (0, import_mysql_core.float)("ctr").notNull().default(0),
+  avgViewRate: (0, import_mysql_core.float)("avgViewRate").notNull().default(0),
+  avgWatchTimeSec: (0, import_mysql_core.int)("avgWatchTimeSec").notNull().default(0),
+  likeRate: (0, import_mysql_core.float)("likeRate").notNull().default(0),
+  recordedAt: (0, import_mysql_core.timestamp)("recordedAt").defaultNow().notNull(),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var aiDailyReport = mysqlTable("ai_daily_report", {
-  id: int("id").autoincrement().primaryKey(),
-  reportDate: date("reportDate").notNull(),
+var aiDailyReport = (0, import_mysql_core.mysqlTable)("ai_daily_report", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  reportDate: (0, import_mysql_core.date)("reportDate").notNull().unique(),
   // JSON string: { title, summary, source, category }[]
-  latestNews: text("latestNews"),
+  latestNews: (0, import_mysql_core.text)("latestNews"),
   // JSON string: { rank, toolName, category, description, examples }[]
-  toolRankings: text("toolRankings"),
+  toolRankings: (0, import_mysql_core.text)("toolRankings"),
   // JSON string: { toolName, category, useCases, tips }[]
-  videoAiTools: text("videoAiTools"),
-  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+  videoAiTools: (0, import_mysql_core.text)("videoAiTools"),
+  // JSON string: { title, url, publishedAt }[] from ledge.ai
+  ledgeNews: (0, import_mysql_core.text)("ledgeNews"),
+  generatedAt: (0, import_mysql_core.timestamp)("generatedAt").defaultNow().notNull(),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+});
+var infoSources = (0, import_mysql_core.mysqlTable)("info_sources", {
+  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  category: (0, import_mysql_core.mysqlEnum)("category", ["youtube", "x", "website"]).notNull().default("website"),
+  title: (0, import_mysql_core.varchar)("title", { length: 255 }).notNull(),
+  url: (0, import_mysql_core.varchar)("url", { length: 512 }).notNull(),
+  memo: (0, import_mysql_core.text)("memo"),
+  sortOrder: (0, import_mysql_core.int)("sortOrder").notNull().default(0),
+  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
+  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 
 // server/_core/env.ts
@@ -141,7 +175,7 @@ var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = (0, import_mysql2.drizzle)(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -203,26 +237,81 @@ async function getUserByOpenId(openId) {
     console.warn("[Database] Cannot get user: database not available");
     return void 0;
   }
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function getLatestAiDailyReport() {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(aiDailyReport).orderBy(desc(aiDailyReport.reportDate)).limit(1);
+  const rows = await db.select().from(aiDailyReport).orderBy((0, import_drizzle_orm.desc)(aiDailyReport.reportDate)).limit(1);
   return rows[0] ?? null;
+}
+async function getInfoSources() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(infoSources).orderBy((0, import_drizzle_orm.asc)(infoSources.category), (0, import_drizzle_orm.asc)(infoSources.sortOrder), (0, import_drizzle_orm.asc)(infoSources.id));
+}
+async function addInfoSource(data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(infoSources).values({
+    category: data.category,
+    title: data.title,
+    url: data.url,
+    memo: data.memo ?? null,
+    sortOrder: 999
+  });
+  return result;
+}
+async function updateInfoSourceMemo(id, memo) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(infoSources).set({ memo }).where((0, import_drizzle_orm.eq)(infoSources.id, id));
+}
+async function deleteInfoSource(id) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(infoSources).where((0, import_drizzle_orm.eq)(infoSources.id, id));
+}
+async function seedDefaultInfoSources() {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select({ id: infoSources.id }).from(infoSources).limit(1);
+  if (existing.length > 0) return;
+  const defaults = [
+    // YouTube
+    { category: "youtube", title: "KEITO\u3010AI&WEB ch\u3011", url: "https://www.youtube.com/@keitoaiweb", sortOrder: 1 },
+    { category: "youtube", title: "\u52D5\u753B\u7DE8\u96C6\u306E\u4E2D\u306E\u4EBA", url: "https://www.youtube.com/@%E5%8B%95%E7%94%BB%E7%B7%A8%E9%9B%86%E3%81%AE%E4%B8%AD%E3%81%AE%E4%BA%BA", sortOrder: 2 },
+    { category: "youtube", title: "AI\u69D8\u306E\u4E0B\u50D5", url: "https://www.youtube.com/@AI-geboku", sortOrder: 3 },
+    { category: "youtube", title: "AI\u5927\u5B66\u3010AI&ChatGPT\u6700\u65B0\u60C5\u5831\u3011", url: "https://www.youtube.com/@AIAIChatGPT-cj4sh/videos", sortOrder: 4 },
+    { category: "youtube", title: "\u30C1\u30E3\u30A8\u30F3\u3010AI\u7814\u7A76\u6240\u3011\uFF5E\u4ED5\u4E8B\u3067\u4F7F\u3048\u308B\u6700\u65B0\u306EAI\u60C5\u5831\u3092\u767A\u4FE1\uFF5E By\u30C7\u30B8\u30E9\u30A4\u30BA", url: "https://www.youtube.com/@chaen-ai-lab", sortOrder: 5 },
+    { category: "youtube", title: "\u3044\u3051\u3068\u3082ch", url: "https://www.youtube.com/@iketomo-ch/videos", sortOrder: 6 },
+    // X
+    { category: "x", title: "Ledge.ai | AI\u30C8\u30EC\u30F3\u30C9\u306E\u9271\u8106", url: "https://x.com/ledgeai?s=20", sortOrder: 1 },
+    { category: "x", title: "AI\u69D8\u306E\u4E0B\u50D5", url: "https://x.com/aigeboku?s=20", sortOrder: 2 },
+    // Website
+    { category: "website", title: "There's An AI For That (TAAFT)", url: "https://theresanaiforthat.com/", sortOrder: 1 },
+    { category: "website", title: "Artificial Analysis", url: "https://artificialanalysis.ai/#media-leaderboards", sortOrder: 2 },
+    { category: "website", title: "AIsmiley", url: "https://aismiley.co.jp/", sortOrder: 3 },
+    { category: "website", title: "Ladge.ai", url: "https://ledge.ai/", sortOrder: 4 }
+  ];
+  await db.insert(infoSources).values(defaults);
 }
 async function upsertAiDailyReport(data) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(aiDailyReport).values(data).onDuplicateKeyUpdate({
-    set: {
+  const dateStr = data.reportDate instanceof Date ? data.reportDate.toISOString().split("T")[0] : String(data.reportDate);
+  const existing = await db.select({ id: aiDailyReport.id }).from(aiDailyReport).where((0, import_drizzle_orm.eq)(aiDailyReport.reportDate, dateStr)).limit(1);
+  if (existing.length > 0) {
+    await db.update(aiDailyReport).set({
       latestNews: data.latestNews,
       toolRankings: data.toolRankings,
       videoAiTools: data.videoAiTools,
       generatedAt: /* @__PURE__ */ new Date()
-    }
-  });
+    }).where((0, import_drizzle_orm.eq)(aiDailyReport.id, existing[0].id));
+  } else {
+    await db.insert(aiDailyReport).values(data);
+  }
 }
 
 // server/_core/cookies.ts
@@ -271,9 +360,9 @@ var HttpError = class extends Error {
 var ForbiddenError = (msg) => new HttpError(403, msg);
 
 // server/_core/sdk.ts
-import axios from "axios";
-import { parse as parseCookieHeader } from "cookie";
-import { SignJWT, jwtVerify } from "jose";
+var import_axios = __toESM(require("axios"));
+var import_cookie = require("cookie");
+var import_jose = require("jose");
 var isNonEmptyString = (value) => typeof value === "string" && value.length > 0;
 var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
@@ -309,7 +398,7 @@ var OAuthService = class {
     return data;
   }
 };
-var createOAuthHttpClient = () => axios.create({
+var createOAuthHttpClient = () => import_axios.default.create({
   baseURL: ENV.oAuthServerUrl,
   timeout: AXIOS_TIMEOUT_MS
 });
@@ -364,7 +453,7 @@ var SDKServer = class {
     if (!cookieHeader) {
       return /* @__PURE__ */ new Map();
     }
-    const parsed = parseCookieHeader(cookieHeader);
+    const parsed = (0, import_cookie.parse)(cookieHeader);
     return new Map(Object.entries(parsed));
   }
   getSessionSecret() {
@@ -391,7 +480,7 @@ var SDKServer = class {
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
     const secretKey = this.getSessionSecret();
-    return new SignJWT({
+    return new import_jose.SignJWT({
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name
@@ -404,7 +493,7 @@ var SDKServer = class {
     }
     try {
       const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
+      const { payload } = await (0, import_jose.jwtVerify)(cookieValue, secretKey, {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
@@ -520,8 +609,8 @@ function buildUserResponse(user) {
     lastSignedIn: (user?.lastSignedIn ?? /* @__PURE__ */ new Date()).toISOString()
   };
 }
-function registerOAuthRoutes(app) {
-  app.get("/api/oauth/callback", async (req, res) => {
+function registerOAuthRoutes(app2) {
+  app2.get("/api/oauth/callback", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
     if (!code || !state) {
@@ -545,7 +634,7 @@ function registerOAuthRoutes(app) {
       res.status(500).json({ error: "OAuth callback failed" });
     }
   });
-  app.get("/api/oauth/mobile", async (req, res) => {
+  app2.get("/api/oauth/mobile", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
     if (!code || !state) {
@@ -571,12 +660,12 @@ function registerOAuthRoutes(app) {
       res.status(500).json({ error: "OAuth mobile exchange failed" });
     }
   });
-  app.post("/api/auth/logout", (req, res) => {
+  app2.post("/api/auth/logout", (req, res) => {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     res.json({ success: true });
   });
-  app.get("/api/auth/me", async (req, res) => {
+  app2.get("/api/auth/me", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
       res.json({ user: buildUserResponse(user) });
@@ -585,7 +674,7 @@ function registerOAuthRoutes(app) {
       res.status(401).json({ error: "Not authenticated", user: null });
     }
   });
-  app.post("/api/auth/session", async (req, res) => {
+  app2.post("/api/auth/session", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
       const authHeader = req.headers.authorization || req.headers.Authorization;
@@ -605,10 +694,10 @@ function registerOAuthRoutes(app) {
 }
 
 // server/_core/systemRouter.ts
-import { z } from "zod";
+var import_zod = require("zod");
 
 // server/_core/notification.ts
-import { TRPCError } from "@trpc/server";
+var import_server = require("@trpc/server");
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
 var trimValue = (value) => value.trim();
@@ -619,13 +708,13 @@ var buildEndpointUrl = (baseUrl) => {
 };
 var validatePayload = (input) => {
   if (!isNonEmptyString2(input.title)) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "BAD_REQUEST",
       message: "Notification title is required."
     });
   }
   if (!isNonEmptyString2(input.content)) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "BAD_REQUEST",
       message: "Notification content is required."
     });
@@ -633,13 +722,13 @@ var validatePayload = (input) => {
   const title = trimValue(input.title);
   const content = trimValue(input.content);
   if (title.length > TITLE_MAX_LENGTH) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "BAD_REQUEST",
       message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`
     });
   }
   if (content.length > CONTENT_MAX_LENGTH) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "BAD_REQUEST",
       message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`
     });
@@ -649,13 +738,13 @@ var validatePayload = (input) => {
 async function notifyOwner(payload) {
   const { title, content } = validatePayload(payload);
   if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Notification service URL is not configured."
     });
   }
   if (!ENV.forgeApiKey) {
-    throw new TRPCError({
+    throw new import_server.TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Notification service API key is not configured."
     });
@@ -687,17 +776,17 @@ async function notifyOwner(payload) {
 }
 
 // server/_core/trpc.ts
-import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
-import superjson from "superjson";
-var t = initTRPC.context().create({
-  transformer: superjson
+var import_server2 = require("@trpc/server");
+var import_superjson = __toESM(require("superjson"));
+var t = import_server2.initTRPC.context().create({
+  transformer: import_superjson.default
 });
 var router = t.router;
 var publicProcedure = t.procedure;
 var requireUser = t.middleware(async (opts) => {
   const { ctx, next } = opts;
   if (!ctx.user) {
-    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    throw new import_server2.TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
   return next({
     ctx: {
@@ -711,7 +800,7 @@ var adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {
     const { ctx, next } = opts;
     if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      throw new import_server2.TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({
       ctx: {
@@ -725,16 +814,16 @@ var adminProcedure = t.procedure.use(
 // server/_core/systemRouter.ts
 var systemRouter = router({
   health: publicProcedure.input(
-    z.object({
-      timestamp: z.number().min(0, "timestamp cannot be negative")
+    import_zod.z.object({
+      timestamp: import_zod.z.number().min(0, "timestamp cannot be negative")
     })
   ).query(() => ({
     ok: true
   })),
   notifyOwner: adminProcedure.input(
-    z.object({
-      title: z.string().min(1, "title is required"),
-      content: z.string().min(1, "content is required")
+    import_zod.z.object({
+      title: import_zod.z.string().min(1, "title is required"),
+      content: import_zod.z.string().min(1, "content is required")
     })
   ).mutation(async ({ input }) => {
     const delivered = await notifyOwner(input);
@@ -745,10 +834,10 @@ var systemRouter = router({
 });
 
 // server/routers.ts
-import { z as z4 } from "zod";
+var import_zod4 = require("zod");
 
 // server/analytics-router.ts
-import { z as z2 } from "zod";
+var import_zod2 = require("zod");
 
 // server/_core/openai.ts
 var OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -856,8 +945,8 @@ function formatRelativeTime(isoDate) {
 }
 
 // server/analytics-router.ts
-import { eq as eq2, desc as desc2, asc, and } from "drizzle-orm";
-import * as crypto from "crypto";
+var import_drizzle_orm2 = require("drizzle-orm");
+var crypto = __toESM(require("crypto"));
 async function sendExpoPushNotifications(tokens, title, body) {
   if (tokens.length === 0) return;
   const messages = tokens.map((token) => ({
@@ -1048,7 +1137,7 @@ async function checkPrivacyInBatches(videoIds, batchSize = 20) {
 }
 var analyticsRouter = router({
   // Upload CSV and store to DB
-  uploadCSV: publicProcedure.input(z2.object({ csvContent: z2.string(), uploadedBy: z2.string().optional() })).mutation(async ({ input }) => {
+  uploadCSV: publicProcedure.input(import_zod2.z.object({ csvContent: import_zod2.z.string(), uploadedBy: import_zod2.z.string().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const videoRows = parseCSVToVideos(input.csvContent);
@@ -1107,12 +1196,12 @@ var analyticsRouter = router({
   }),
   // Get all videos
   getVideos: publicProcedure.input(
-    z2.object({
-      filter: z2.enum(["all", "regular", "short", "private"]).optional(),
-      sortBy: z2.enum(["views", "estimatedRevenue", "publishedDate", "ctr", "likeRate", "avgViewRate", "subscriberChange", "impressions"]).optional(),
-      sortOrder: z2.enum(["asc", "desc"]).optional(),
-      limit: z2.number().optional(),
-      offset: z2.number().optional()
+    import_zod2.z.object({
+      filter: import_zod2.z.enum(["all", "regular", "short", "private"]).optional(),
+      sortBy: import_zod2.z.enum(["views", "estimatedRevenue", "publishedDate", "ctr", "likeRate", "avgViewRate", "subscriberChange", "impressions"]).optional(),
+      sortOrder: import_zod2.z.enum(["asc", "desc"]).optional(),
+      limit: import_zod2.z.number().optional(),
+      offset: import_zod2.z.number().optional()
     }).optional()
   ).query(async ({ input }) => {
     const db = await getDb();
@@ -1120,11 +1209,11 @@ var analyticsRouter = router({
     const { filter = "all", sortBy = "publishedDate", sortOrder = "desc", limit = 600, offset = 0 } = input || {};
     let baseQuery = db.select().from(videos).$dynamic();
     if (filter === "regular") {
-      baseQuery = baseQuery.where(and(eq2(videos.isShort, false), eq2(videos.isPrivate, false)));
+      baseQuery = baseQuery.where((0, import_drizzle_orm2.and)((0, import_drizzle_orm2.eq)(videos.isShort, false), (0, import_drizzle_orm2.eq)(videos.isPrivate, false)));
     } else if (filter === "short") {
-      baseQuery = baseQuery.where(eq2(videos.isShort, true));
+      baseQuery = baseQuery.where((0, import_drizzle_orm2.eq)(videos.isShort, true));
     } else if (filter === "private") {
-      baseQuery = baseQuery.where(eq2(videos.isPrivate, true));
+      baseQuery = baseQuery.where((0, import_drizzle_orm2.eq)(videos.isPrivate, true));
     }
     const colMap = {
       views: videos.views,
@@ -1137,15 +1226,15 @@ var analyticsRouter = router({
       impressions: videos.impressions
     };
     const col = colMap[sortBy] || videos.publishedDate;
-    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? asc(col) : desc2(col));
+    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? (0, import_drizzle_orm2.asc)(col) : (0, import_drizzle_orm2.desc)(col));
     return baseQuery.limit(limit).offset(offset);
   }),
   // Get monthly stats
-  getMonthlyStats: publicProcedure.input(z2.object({ months: z2.number().optional() }).optional()).query(async ({ input }) => {
+  getMonthlyStats: publicProcedure.input(import_zod2.z.object({ months: import_zod2.z.number().optional() }).optional()).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
     const { months = 24 } = input || {};
-    const rows = await db.select().from(monthlyStats).orderBy(desc2(monthlyStats.month)).limit(months);
+    const rows = await db.select().from(monthlyStats).orderBy((0, import_drizzle_orm2.desc)(monthlyStats.month)).limit(months);
     return rows.reverse();
   }),
   // Get channel summary (aggregated)
@@ -1181,11 +1270,11 @@ var analyticsRouter = router({
   }),
   // Save channel config
   saveChannelConfig: publicProcedure.input(
-    z2.object({
-      channelName: z2.string(),
-      channelUrl: z2.string().optional(),
-      channelId: z2.string().optional(),
-      iconUrl: z2.string().optional()
+    import_zod2.z.object({
+      channelName: import_zod2.z.string(),
+      channelUrl: import_zod2.z.string().optional(),
+      channelId: import_zod2.z.string().optional(),
+      iconUrl: import_zod2.z.string().optional()
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
@@ -1213,27 +1302,27 @@ var analyticsRouter = router({
   hasAdminPassword: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return false;
-    const rows = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
+    const rows = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
     return rows.length > 0 && !!rows[0].settingValue;
   }),
   // Set admin password (first time or reset)
-  setAdminPassword: publicProcedure.input(z2.object({ password: z2.string().min(4) })).mutation(async ({ input }) => {
+  setAdminPassword: publicProcedure.input(import_zod2.z.object({ password: import_zod2.z.string().min(4) })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const hash = crypto.createHash("sha256").update(input.password).digest("hex");
-    const existing = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
+    const existing = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
     if (existing.length > 0) {
-      await db.update(adminSettings).set({ settingValue: hash }).where(eq2(adminSettings.settingKey, "admin_password_hash"));
+      await db.update(adminSettings).set({ settingValue: hash }).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
     } else {
       await db.insert(adminSettings).values({ settingKey: "admin_password_hash", settingValue: hash });
     }
     return { success: true };
   }),
   // Verify admin password
-  verifyAdminPassword: publicProcedure.input(z2.object({ password: z2.string() })).mutation(async ({ input }) => {
+  verifyAdminPassword: publicProcedure.input(import_zod2.z.object({ password: import_zod2.z.string() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    const rows = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
+    const rows = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
     if (rows.length === 0 || !rows[0].settingValue) {
       return { valid: true };
     }
@@ -1242,7 +1331,7 @@ var analyticsRouter = router({
   }),
   // ── Push token management ─────────────────────────────────────────────────
   // Register push token
-  registerPushToken: publicProcedure.input(z2.object({ token: z2.string(), deviceName: z2.string().optional() })).mutation(async ({ input }) => {
+  registerPushToken: publicProcedure.input(import_zod2.z.object({ token: import_zod2.z.string(), deviceName: import_zod2.z.string().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return { success: false };
     await db.insert(pushTokens).values({ token: input.token, deviceName: input.deviceName || null }).onDuplicateKeyUpdate({ set: { deviceName: input.deviceName || null } });
@@ -1259,17 +1348,17 @@ var analyticsRouter = router({
   getLastUpload: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return null;
-    const rows = await db.select().from(csvUploads).orderBy(desc2(csvUploads.createdAt)).limit(1);
+    const rows = await db.select().from(csvUploads).orderBy((0, import_drizzle_orm2.desc)(csvUploads.createdAt)).limit(1);
     return rows[0] || null;
   }),
   // ── AI Bot ────────────────────────────────────────────────────────────────
   // Answer questions about the channel analytics using LLM
-  askBot: publicProcedure.input(z2.object({ question: z2.string().max(500) })).mutation(async ({ input }) => {
+  askBot: publicProcedure.input(import_zod2.z.object({ question: import_zod2.z.string().max(500) })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    const allVideos = await db.select().from(videos).orderBy(desc2(videos.publishedDate));
+    const allVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.publishedDate));
     if (allVideos.length === 0) throw new Error("\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002CSV\u3092\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    const allMonthly = await db.select().from(monthlyStats).orderBy(asc(monthlyStats.month));
+    const allMonthly = await db.select().from(monthlyStats).orderBy((0, import_drizzle_orm2.asc)(monthlyStats.month));
     const channelRows = await db.select().from(channelConfig).limit(1);
     const channel = channelRows[0];
     const totalVideos = allVideos.length;
@@ -1322,7 +1411,7 @@ ${recent5.join("\n")}`;
   }),
   // ── トレンド企画提案システム ─────────────────────────────────────────────────
   // 日本のYouTubeトレンド動画を取得
-  getTrendingVideos: publicProcedure.input(z2.object({ category: z2.string().optional() })).query(async ({ input }) => {
+  getTrendingVideos: publicProcedure.input(import_zod2.z.object({ category: import_zod2.z.string().optional() })).query(async ({ input }) => {
     const categories = [
       { label: "\u30D3\u30B8\u30CD\u30B9\u30FB\u304A\u91D1", query: "\u65E5\u672C \u30D3\u30B8\u30CD\u30B9 \u304A\u91D1 \u7A3C\u3050 2026" },
       { label: "\u66B4\u9732\u30FB\u708E\u4E0A", query: "\u65E5\u672C \u66B4\u9732 \u708E\u4E0A \u771F\u76F8 2026" },
@@ -1343,18 +1432,18 @@ ${recent5.join("\n")}`;
     return { trends: results };
   }),
   // AI企画提案を生成
-  generateIdeas: publicProcedure.input(z2.object({
-    selectedTrends: z2.array(z2.object({
-      title: z2.string(),
-      category: z2.string(),
-      views: z2.string().optional()
+  generateIdeas: publicProcedure.input(import_zod2.z.object({
+    selectedTrends: import_zod2.z.array(import_zod2.z.object({
+      title: import_zod2.z.string(),
+      category: import_zod2.z.string(),
+      views: import_zod2.z.string().optional()
     })),
-    focusCategory: z2.string().optional()
+    focusCategory: import_zod2.z.string().optional()
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return { ideas: [], rawText: "", error: "DB not available" };
-    const topVideos = await db.select().from(videos).orderBy(desc2(videos.views)).limit(30);
-    const highCtrVideos = await db.select().from(videos).orderBy(desc2(videos.ctr)).limit(20);
+    const topVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.views)).limit(30);
+    const highCtrVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.ctr)).limit(20);
     const channel = await db.select().from(channelConfig).limit(1).then((r) => r[0]);
     const topTitles = topVideos.slice(0, 10).map(
       (v) => `\u300C${v.title}\u300D(${(v.views || 0).toLocaleString()}\u56DE, CTR ${((v.ctr || 0) * 100).toFixed(1)}%)`
@@ -1418,7 +1507,7 @@ ${trendContext}
     }
   }),
   // 特定のトレンドキーワードで深掘り検索
-  searchTrendDetail: publicProcedure.input(z2.object({ keyword: z2.string() })).query(async ({ input }) => {
+  searchTrendDetail: publicProcedure.input(import_zod2.z.object({ keyword: import_zod2.z.string() })).query(async ({ input }) => {
     try {
       const items = await searchYouTube(input.keyword + " \u65E5\u672C", 10);
       return { videos: items };
@@ -1428,14 +1517,15 @@ ${trendContext}
   }),
   // ── 初速データ（Early Stats）API ────────────────────────────────────────────
   // 初速データを保存・更新
-  saveEarlyStats: publicProcedure.input(z2.object({
-    videoId: z2.string(),
-    timeWindow: z2.enum(["1h", "24h", "48h", "1week"]),
-    views: z2.number().min(0),
-    impressions: z2.number().min(0),
-    ctr: z2.number().min(0),
-    avgViewRate: z2.number().min(0),
-    likeRate: z2.number().min(0)
+  saveEarlyStats: publicProcedure.input(import_zod2.z.object({
+    videoId: import_zod2.z.string(),
+    timeWindow: import_zod2.z.enum(["1h", "24h", "48h", "1week"]),
+    views: import_zod2.z.number().min(0),
+    impressions: import_zod2.z.number().min(0),
+    ctr: import_zod2.z.number().min(0),
+    avgViewRate: import_zod2.z.number().min(0),
+    avgWatchTimeSec: import_zod2.z.number().min(0).optional().default(0),
+    likeRate: import_zod2.z.number().min(0)
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -1446,6 +1536,7 @@ ${trendContext}
       impressions: input.impressions,
       ctr: input.ctr,
       avgViewRate: input.avgViewRate,
+      avgWatchTimeSec: input.avgWatchTimeSec ?? 0,
       likeRate: input.likeRate
     }).onDuplicateKeyUpdate({
       set: {
@@ -1453,23 +1544,24 @@ ${trendContext}
         impressions: input.impressions,
         ctr: input.ctr,
         avgViewRate: input.avgViewRate,
+        avgWatchTimeSec: input.avgWatchTimeSec ?? 0,
         likeRate: input.likeRate
       }
     });
     return { success: true };
   }),
   // 特定動画の初速データを取得
-  getEarlyStats: publicProcedure.input(z2.object({ videoId: z2.string() })).query(async ({ input }) => {
+  getEarlyStats: publicProcedure.input(import_zod2.z.object({ videoId: import_zod2.z.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
-    const rows = await db.select().from(videoEarlyStats).where(eq2(videoEarlyStats.videoId, input.videoId)).orderBy(asc(videoEarlyStats.timeWindow));
+    const rows = await db.select().from(videoEarlyStats).where((0, import_drizzle_orm2.eq)(videoEarlyStats.videoId, input.videoId)).orderBy((0, import_drizzle_orm2.asc)(videoEarlyStats.timeWindow));
     return rows;
   }),
   // 全動画の初速データ一覧（ランキング用）
-  getAllEarlyStats: publicProcedure.input(z2.object({
-    timeWindow: z2.enum(["1h", "24h", "48h", "1week"]).optional(),
-    sortBy: z2.enum(["views", "impressions", "ctr", "avgViewRate", "likeRate"]).optional(),
-    limit: z2.number().min(1).max(200).optional()
+  getAllEarlyStats: publicProcedure.input(import_zod2.z.object({
+    timeWindow: import_zod2.z.enum(["1h", "24h", "48h", "1week"]).optional(),
+    sortBy: import_zod2.z.enum(["views", "impressions", "ctr", "avgViewRate", "avgWatchTimeSec", "likeRate"]).optional(),
+    limit: import_zod2.z.number().min(1).max(200).optional()
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
@@ -1483,31 +1575,32 @@ ${trendContext}
       impressions: videoEarlyStats.impressions,
       ctr: videoEarlyStats.ctr,
       avgViewRate: videoEarlyStats.avgViewRate,
+      avgWatchTimeSec: videoEarlyStats.avgWatchTimeSec,
       likeRate: videoEarlyStats.likeRate,
       recordedAt: videoEarlyStats.recordedAt,
       title: videos.title,
       publishedAt: videos.publishedAt,
       isShort: videos.isShort,
       finalViews: videos.views
-    }).from(videoEarlyStats).leftJoin(videos, eq2(videoEarlyStats.videoId, videos.videoId)).where(eq2(videoEarlyStats.timeWindow, tw)).orderBy(desc2(videoEarlyStats.views)).limit(limit);
+    }).from(videoEarlyStats).leftJoin(videos, (0, import_drizzle_orm2.eq)(videoEarlyStats.videoId, videos.videoId)).where((0, import_drizzle_orm2.eq)(videoEarlyStats.timeWindow, tw)).orderBy((0, import_drizzle_orm2.desc)(videoEarlyStats.views)).limit(limit);
     return rows;
   }),
   // 初速データを削除
-  deleteEarlyStats: publicProcedure.input(z2.object({ id: z2.number() })).mutation(async ({ input }) => {
+  deleteEarlyStats: publicProcedure.input(import_zod2.z.object({ id: import_zod2.z.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    await db.delete(videoEarlyStats).where(eq2(videoEarlyStats.id, input.id));
+    await db.delete(videoEarlyStats).where((0, import_drizzle_orm2.eq)(videoEarlyStats.id, input.id));
     return { success: true };
   }),
   // DBのavgViewRateとlikeRateを入れ替える修正エンドポイント
-  fixSwappedRates: publicProcedure.input(z2.object({ secret: z2.string() })).mutation(async ({ input }) => {
+  fixSwappedRates: publicProcedure.input(import_zod2.z.object({ secret: import_zod2.z.string() })).mutation(async ({ input }) => {
     if (input.secret !== "fix-swap-2026") throw new Error("Unauthorized");
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const allVideos = await db.select().from(videos);
     let updated = 0;
     for (const v of allVideos) {
-      await db.update(videos).set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate }).where(eq2(videos.id, v.id));
+      await db.update(videos).set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate }).where((0, import_drizzle_orm2.eq)(videos.id, v.id));
       updated++;
     }
     return { success: true, updated };
@@ -1668,11 +1761,411 @@ async function invokeLLM(params) {
 }
 
 // server/ai-info-router.ts
-import { z as z3 } from "zod";
+var import_zod3 = require("zod");
+function stripHtml(html) {
+  return html.replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/g, (e) => {
+    const map = {
+      "&amp;": "&",
+      "&lt;": "<",
+      "&gt;": ">",
+      "&quot;": '"',
+      "&#039;": "'",
+      "&nbsp;": " ",
+      "&mdash;": "\u2014",
+      "&ndash;": "\u2013",
+      "&hellip;": "\u2026"
+    };
+    return map[e] ?? e;
+  }).trim();
+}
+async function fetchAiGalleryNews() {
+  const categoryIds = [495, 400, 319, 1, 318];
+  const allPosts = [];
+  for (const catId of categoryIds) {
+    try {
+      const res = await fetch(
+        `https://ai-gallery.jp/wp-json/wp/v2/posts?per_page=5&categories=${catId}&_fields=id,title,link,date,excerpt&orderby=date&order=desc`,
+        { headers: { "User-Agent": "Mozilla/5.0 (compatible; ViewCore/1.0)" } }
+      );
+      if (!res.ok) continue;
+      const posts = await res.json();
+      const catName = catId === 495 ? "AI\u30CB\u30E5\u30FC\u30B9" : catId === 400 ? "AI\u30C4\u30FC\u30EB" : catId === 319 ? "AI\u6D3B\u7528\u4E8B\u4F8B" : catId === 1 ? "ChatGPT" : "AI\u57FA\u790E\u77E5\u8B58";
+      const impact = catId === 495 ? "high" : catId === 400 || catId === 319 ? "medium" : "low";
+      for (const post of posts) {
+        const title = stripHtml(post.title.rendered);
+        const summary = stripHtml(post.excerpt.rendered).slice(0, 120);
+        allPosts.push({
+          title,
+          summary: summary || title,
+          category: catName,
+          impact,
+          url: post.link,
+          publishedAt: post.date.slice(0, 10)
+        });
+      }
+    } catch {
+    }
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return allPosts.filter((p) => {
+    if (seen.has(p.url)) return false;
+    seen.add(p.url);
+    return true;
+  }).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 15);
+}
+async function fetchAaMediaRankings(mediaType) {
+  const pageUrl = mediaType === "image" ? "https://artificialanalysis.ai/text-to-image" : "https://artificialanalysis.ai/video";
+  let html = "";
+  try {
+    const res = await fetch(pageUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+  if (!html || html.length < 1e4) return [];
+  const urlPrefix = mediaType === "image" ? "/image/model-families/" : "/video/model-families/";
+  const baseUrl = "https://artificialanalysis.ai";
+  const entryPattern = /\\"name\\":\\"([^\\]+)\\"[^}]{0,300}\\"url\\":\\"(\/(?:image|video)\/model-families\/[^\\]+)\\"[^}]{0,500}\\"elos\\":\[\{\\"elo\\":([\.\d]+)/g;
+  const seen = /* @__PURE__ */ new Map();
+  let m;
+  while ((m = entryPattern.exec(html)) !== null) {
+    const name = m[1];
+    const urlPath = m[2];
+    const elo = parseFloat(m[3]);
+    if (!seen.has(name) || seen.get(name).elo < elo) {
+      seen.set(name, { elo, url: urlPath });
+    }
+  }
+  if (seen.size === 0) return [];
+  const sorted = Array.from(seen.entries()).sort((a, b) => b[1].elo - a[1].elo).slice(0, 8);
+  const imageDescriptions = {
+    "Midjourney": { desc: "\u9AD8\u54C1\u8CEA\u30A2\u30FC\u30C8\u751F\u6210\u306E\u5B9A\u756A\u30C4\u30FC\u30EB", bestFor: "\u82B8\u8853\u7684\u30FB\u9AD8\u54C1\u8CEA\u306A\u753B\u50CF\u751F\u6210" },
+    "OpenAI GPT": { desc: "OpenAI\u306EGPT-4o\u753B\u50CF\u751F\u6210", bestFor: "\u30C6\u30AD\u30B9\u30C8\u4ED8\u304D\u753B\u50CF\u30FB\u6C4E\u7528\u751F\u6210" },
+    "Gemini": { desc: "Google\u306EImagen\u642D\u8F09\u30E2\u30C7\u30EB", bestFor: "\u30EA\u30A2\u30EB\u306A\u5199\u771F\u30FB\u591A\u69D8\u306A\u30B9\u30BF\u30A4\u30EB" },
+    "Riverflow": { desc: "\u9AD8\u901F\u30FB\u9AD8\u54C1\u8CEA\u306A\u753B\u50CF\u751F\u6210", bestFor: "\u5546\u7528\u5229\u7528\u30FB\u9AD8\u901F\u751F\u6210" },
+    "FLUX": { desc: "Black Forest\u306E\u9AD8\u54C1\u8CEA\u30AA\u30FC\u30D7\u30F3\u30E2\u30C7\u30EB", bestFor: "\u30EA\u30A2\u30EB\u5199\u771F\u30FB\u30D5\u30A1\u30A4\u30F3\u30C1\u30E5\u30FC\u30CB\u30F3\u30B0" },
+    "Ideogram": { desc: "\u30C6\u30AD\u30B9\u30C8\u63CF\u753B\u304C\u5F97\u610F\u306A\u753B\u50CF\u751F\u6210AI", bestFor: "\u30ED\u30B4\u30FB\u30C6\u30AD\u30B9\u30C8\u5165\u308A\u753B\u50CF" },
+    "Recraft": { desc: "\u30C7\u30B6\u30A4\u30F3\u7279\u5316\u306E\u753B\u50CF\u751F\u6210AI", bestFor: "UI/UX\u30FB\u30D9\u30AF\u30BF\u30FC\u30C7\u30B6\u30A4\u30F3" },
+    "Seedream": { desc: "\u30D0\u30A4\u30C8\u30C0\u30F3\u30B9\u767A\u306E\u9AD8\u54C1\u8CEA\u30E2\u30C7\u30EB", bestFor: "\u30A2\u30CB\u30E1\u30FB\u30A4\u30E9\u30B9\u30C8\u751F\u6210" },
+    "Adobe Firefly": { desc: "Adobe\u306E\u5546\u7528\u5B89\u5168\u306A\u753B\u50CF\u751F\u6210AI", bestFor: "\u5546\u7528\u5229\u7528\u30FB\u8457\u4F5C\u6A29\u30D5\u30EA\u30FC" },
+    "Imagen": { desc: "Google DeepMind\u306E\u753B\u50CF\u751F\u6210\u30E2\u30C7\u30EB", bestFor: "\u30EA\u30A2\u30EB\u306A\u5199\u771F\u751F\u6210" }
+  };
+  const videoDescriptions = {
+    "Kling": { desc: "Kuaishou\u306E\u9AD8\u54C1\u8CEA\u52D5\u753B\u751F\u6210AI", bestFor: "\u30EA\u30A2\u30EB\u306A\u52D5\u753B\u30FB\u9577\u5C3A\u751F\u6210" },
+    "Sora": { desc: "OpenAI\u306E\u9769\u65B0\u7684\u52D5\u753B\u751F\u6210AI", bestFor: "\u9AD8\u54C1\u8CEA\u30FB\u9577\u5C3A\u52D5\u753B\u751F\u6210" },
+    "Runway": { desc: "\u30D7\u30ED\u5411\u3051\u52D5\u753B\u751F\u6210\u30FB\u7DE8\u96C6AI", bestFor: "\u6620\u50CF\u5236\u4F5C\u30FB\u30A8\u30D5\u30A7\u30AF\u30C8" },
+    "Pika": { desc: "\u9AD8\u901F\u52D5\u753B\u751F\u6210\u306E\u30B9\u30BF\u30FC\u30C8\u30A2\u30C3\u30D7", bestFor: "\u77ED\u5C3A\u30FB\u30AF\u30EA\u30A8\u30A4\u30C6\u30A3\u30D6\u52D5\u753B" },
+    "Veo": { desc: "Google\u306EDeepMind\u52D5\u753B\u751F\u6210AI", bestFor: "\u9AD8\u54C1\u8CEA\u30FB\u6620\u753B\u7684\u52D5\u753B" },
+    "Wan": { desc: "Alibaba\u306E\u52D5\u753B\u751F\u6210\u30E2\u30C7\u30EB", bestFor: "\u4E2D\u56FD\u8A9E\u30B3\u30F3\u30C6\u30F3\u30C4\u30FB\u6C4E\u7528" },
+    "HunyuanVideo": { desc: "Tencent\u306E\u9AD8\u54C1\u8CEA\u52D5\u753B\u751F\u6210AI", bestFor: "\u30EA\u30A2\u30EB\u52D5\u753B\u30FB\u9577\u5C3A\u751F\u6210" },
+    "LTX": { desc: "Lightricks\u88FD\u306E\u9AD8\u901F\u52D5\u753B\u751F\u6210", bestFor: "\u9AD8\u901F\u30FB\u4F4E\u30B3\u30B9\u30C8\u52D5\u753B\u751F\u6210" },
+    "CogVideoX": { desc: "\u6E05\u83EF\u5927\u5B66\u767A\u306E\u30AA\u30FC\u30D7\u30F3\u52D5\u753BAI", bestFor: "\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u30FB\u30AB\u30B9\u30BF\u30DE\u30A4\u30BA" }
+  };
+  const descMap = mediaType === "image" ? imageDescriptions : videoDescriptions;
+  function getMediaInfo(name) {
+    for (const [key, info] of Object.entries(descMap)) {
+      if (name.includes(key)) return info;
+    }
+    return { desc: `${mediaType === "image" ? "\u753B\u50CF" : "\u52D5\u753B"}\u751F\u6210AI\u30E2\u30C7\u30EB`, bestFor: "\u9AD8\u54C1\u8CEA\u30B3\u30F3\u30C6\u30F3\u30C4\u751F\u6210" };
+  }
+  return sorted.map(([name, { elo, url }], i) => {
+    const info = getMediaInfo(name);
+    return {
+      rank: i + 1,
+      toolName: name,
+      description: info.desc,
+      bestFor: info.bestFor,
+      url: `${baseUrl}${url}`,
+      score: `ELO: ${elo.toFixed(0)}`
+    };
+  });
+}
+async function fetchAaAllModels() {
+  let html = "";
+  try {
+    const res = await fetch("https://artificialanalysis.ai/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+  if (!html || html.length < 1e5) return [];
+  const scriptMatches = [...html.matchAll(/<script[^>]*>(self\.__next_f\.push\(.*?\))<\/script>/gs)];
+  let targetScript = "";
+  for (const match of scriptMatches) {
+    if (match[1].includes("safeGdpval") && match[1].length > 5e4) {
+      targetScript = match[1];
+      break;
+    }
+  }
+  if (!targetScript) return [];
+  const idPositions = [];
+  const idPattern = /\{\\"id\\":\\"[0-9a-f-]{36}\\"/g;
+  let m;
+  while ((m = idPattern.exec(targetScript)) !== null) {
+    idPositions.push(m.index);
+  }
+  if (idPositions.length === 0) return [];
+  const models = [];
+  const baseUrl = "https://artificialanalysis.ai";
+  for (let i = 0; i < idPositions.length; i++) {
+    const start = idPositions[i];
+    const end = i + 1 < idPositions.length ? idPositions[i + 1] : start + 5e3;
+    const entry = targetScript.substring(start, end);
+    const nameMatch = /\\"short_name\\":\\"([^\\"]+)\\"/.exec(entry);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+    const urlMatch = /\\"model_url\\":\\"([^\\"]+)\\"/.exec(entry);
+    const modelUrl = urlMatch ? urlMatch[1] : null;
+    const extract = (pattern) => {
+      const m2 = pattern.exec(entry);
+      return m2 ? parseFloat(m2[1]) : void 0;
+    };
+    const intelligence = extract(/\\"intelligence_index\\":([-\d.]+)/);
+    const speed = extract(/\\"median_output_speed\\":([-\d.]+)/);
+    const price = extract(/\\"price_1m_blended_3_to_1\\":([-\d.]+)/);
+    const omniscience = extract(/\\"omniscience\\":([-\d.]+)/);
+    const gdpval = extract(/\\"safeGdpval\\":\{\\"elo\\":([-\d.]+)/);
+    const openness = extract(/\\"opennessIndex\\":([-\d.]+)/);
+    const coding = extract(/\\"coding_index\\":([-\d.]+)/);
+    const agentic = extract(/\\"agentic_index\\":([-\d.]+)/);
+    models.push({
+      name,
+      url: modelUrl ? `${baseUrl}${modelUrl}` : baseUrl,
+      intelligence,
+      speed,
+      price,
+      omniscience,
+      gdpval,
+      openness,
+      coding,
+      agentic
+    });
+  }
+  return models;
+}
+async function fetchArtificialAnalysisRankings() {
+  const modelDescriptions = {
+    "Gemini": { desc: "Google\u306E\u6700\u65B0\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EBLLM", bestFor: "\u8907\u96D1\u306A\u63A8\u8AD6\u30FB\u30B3\u30FC\u30C9\u751F\u6210" },
+    "GPT": { desc: "OpenAI\u306E\u6700\u65B0GPT\u30E2\u30C7\u30EB", bestFor: "\u6C4E\u7528\u30BF\u30B9\u30AF\u30FB\u6587\u7AE0\u751F\u6210" },
+    "Claude": { desc: "Anthropic\u306E\u5B89\u5168\u6027\u91CD\u8996LLM", bestFor: "\u9577\u6587\u5206\u6790\u30FB\u30B3\u30F3\u30C6\u30F3\u30C4\u751F\u6210" },
+    "Grok": { desc: "xAI\u306E\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u5BFE\u5FDCLLM", bestFor: "\u6700\u65B0\u60C5\u5831\u30FBX\u9023\u643A\u30BF\u30B9\u30AF" },
+    "DeepSeek": { desc: "\u4E2D\u56FD\u767A\u306E\u9AD8\u30B3\u30B9\u30D1\u30AA\u30FC\u30D7\u30F3LLM", bestFor: "\u30B3\u30FC\u30C9\u751F\u6210\u30FB\u6570\u5B66\u63A8\u8AD6" },
+    "Llama": { desc: "Meta\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u30E2\u30C7\u30EB", bestFor: "\u30ED\u30FC\u30AB\u30EB\u5B9F\u884C\u30FB\u30AB\u30B9\u30BF\u30DE\u30A4\u30BA" },
+    "Mistral": { desc: "\u6B27\u5DDE\u767A\u306E\u8EFD\u91CF\u9AD8\u6027\u80FDLLM", bestFor: "\u9AD8\u901F\u51E6\u7406\u30FB\u30B3\u30B9\u30C8\u524A\u6E1B" },
+    "NVIDIA": { desc: "NVIDIA\u88FD\u306E\u9AD8\u901F\u63A8\u8AD6LLM", bestFor: "\u30A8\u30F3\u30BF\u30FC\u30D7\u30E9\u30A4\u30BA\u5411\u3051" },
+    "GLM": { desc: "\u6E05\u83EF\u5927\u5B66\u767A\u306E\u4E2D\u56FD\u8A9E\u5BFE\u5FDCLLM", bestFor: "\u4E2D\u56FD\u8A9E\u51E6\u7406\u30FB\u591A\u8A00\u8A9E\u5BFE\u5FDC" },
+    "Muse": { desc: "\u65B0\u4E16\u4EE3\u30AF\u30EA\u30A8\u30A4\u30C6\u30A3\u30D6LLM", bestFor: "\u5275\u4F5C\u30FB\u30A2\u30A4\u30C7\u30A2\u751F\u6210" },
+    "gpt-oss": { desc: "OpenAI\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u7CFB\u30E2\u30C7\u30EB", bestFor: "\u9AD8\u901F\u51E6\u7406\u30FB\u4F4E\u30B3\u30B9\u30C8" },
+    "MiniMax": { desc: "MiniMax\u306E\u9AD8\u6027\u80FD\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EBLLM", bestFor: "\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EB\u30FB\u9577\u6587\u51E6\u7406" },
+    "Qwen": { desc: "Alibaba\u306E\u591A\u8A00\u8A9E\u5BFE\u5FDCLLM", bestFor: "\u591A\u8A00\u8A9E\u51E6\u7406\u30FB\u30B3\u30FC\u30C9\u751F\u6210" },
+    "Kimi": { desc: "Moonshot AI\u306E\u9577\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8LLM", bestFor: "\u8D85\u9577\u6587\u51E6\u7406\u30FB\u6587\u66F8\u5206\u6790" },
+    "K2": { desc: "MBZUAI\u767A\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9LLM", bestFor: "\u7814\u7A76\u30FB\u30AA\u30FC\u30D7\u30F3\u5229\u7528" },
+    "Nemotron": { desc: "NVIDIA\u88FD\u306E\u9AD8\u6027\u80FD\u63A8\u8AD6LLM", bestFor: "\u30A8\u30F3\u30BF\u30FC\u30D7\u30E9\u30A4\u30BA\u30FB\u9AD8\u901F\u51E6\u7406" },
+    "MiMo": { desc: "Xiaomi\u767A\u306E\u8EFD\u91CF\u9AD8\u6027\u80FDLLM", bestFor: "\u30E2\u30D0\u30A4\u30EB\u30FB\u30A8\u30C3\u30B8\u63A8\u8AD6" },
+    "Gemma": { desc: "Google\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u8EFD\u91CFLLM", bestFor: "\u30ED\u30FC\u30AB\u30EB\u5B9F\u884C\u30FB\u7814\u7A76" },
+    "Solar": { desc: "Upstage\u767A\u306E\u9AD8\u6027\u80FDLLM", bestFor: "\u4F01\u696D\u5411\u3051\u30FB\u6587\u66F8\u51E6\u7406" },
+    "EXAONE": { desc: "LG AI Research\u767A\u306ELLM", bestFor: "\u97D3\u56FD\u8A9E\u30FB\u591A\u8A00\u8A9E\u51E6\u7406" }
+  };
+  function getModelInfo(name) {
+    for (const [key, info] of Object.entries(modelDescriptions)) {
+      if (name.includes(key)) return info;
+    }
+    return { desc: "\u9AD8\u6027\u80FDAI\u30E2\u30C7\u30EB", bestFor: "\u6C4E\u7528\u30BF\u30B9\u30AF" };
+  }
+  const toToolList = (models, scoreField, scoreLabel, scoreUnit, ascending = false, decimalPlaces = 1) => models.map((m, i) => {
+    const info = getModelInfo(m.name);
+    const scoreVal = m[scoreField];
+    const scoreStr = scoreVal !== void 0 ? `${scoreLabel}: ${scoreVal.toFixed(decimalPlaces)}${scoreUnit}` : void 0;
+    return {
+      rank: i + 1,
+      toolName: m.name,
+      description: info.desc,
+      bestFor: info.bestFor,
+      url: m.url,
+      score: scoreStr
+    };
+  });
+  const rankings = [];
+  const [allModels, imageModels, videoModels] = await Promise.all([
+    fetchAaAllModels(),
+    fetchAaMediaRankings("image"),
+    fetchAaMediaRankings("video")
+  ]);
+  if (allModels.length > 0) {
+    const intelligenceModels = allModels.filter((m) => m.intelligence !== void 0 && m.intelligence !== null).sort((a, b) => (b.intelligence ?? 0) - (a.intelligence ?? 0)).slice(0, 8);
+    if (intelligenceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F9E0} \u77E5\u80FD\u6307\u6570\uFF08Intelligence Index\uFF09",
+        tools: toToolList(intelligenceModels, "intelligence", "\u77E5\u6027\u6307\u6570", "")
+      });
+    }
+    const omniscienceModels = allModels.filter((m) => m.omniscience !== void 0 && m.omniscience !== null).sort((a, b) => (b.omniscience ?? -999) - (a.omniscience ?? -999)).slice(0, 8);
+    if (omniscienceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F310} AA-\u5168\u77E5\uFF08Omniscience Index\uFF09",
+        tools: toToolList(omniscienceModels, "omniscience", "\u5168\u77E5\u6307\u6570", "")
+      });
+    }
+    const gdpvalModels = allModels.filter((m) => m.gdpval !== void 0 && m.gdpval !== null).sort((a, b) => (b.gdpval ?? 0) - (a.gdpval ?? 0)).slice(0, 8);
+    if (gdpvalModels.length > 0) {
+      rankings.push({
+        category: "\u{1F3C6} GDPval-AA\uFF08\u7D4C\u6E08\u4FA1\u5024\u30B9\u30B3\u30A2\uFF09",
+        tools: toToolList(gdpvalModels, "gdpval", "ELO", "", false, 0)
+      });
+    }
+    const opennessModels = allModels.filter((m) => m.openness !== void 0 && m.openness !== null).sort((a, b) => (b.openness ?? 0) - (a.openness ?? 0)).slice(0, 8);
+    if (opennessModels.length > 0) {
+      rankings.push({
+        category: "\u{1F513} \u958B\u653E\u6027\u6307\u6570\uFF08Openness Index\uFF09",
+        tools: toToolList(opennessModels, "openness", "\u958B\u653E\u6027", "")
+      });
+    }
+    const codingModels = allModels.filter((m) => m.coding !== void 0 && m.coding !== null).sort((a, b) => (b.coding ?? 0) - (a.coding ?? 0)).slice(0, 8);
+    if (codingModels.length > 0) {
+      rankings.push({
+        category: "\u{1F4BB} \u60C5\u5831\u5206\u6790\u30FB\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\u6307\u6570\uFF08Coding Index\uFF09",
+        tools: toToolList(codingModels, "coding", "\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\u6307\u6570", "")
+      });
+    }
+    const agenticModels = allModels.filter((m) => m.agentic !== void 0 && m.agentic !== null).sort((a, b) => (b.agentic ?? 0) - (a.agentic ?? 0)).slice(0, 8);
+    if (agenticModels.length > 0) {
+      rankings.push({
+        category: "\u{1F916} \u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6307\u6570\uFF08Agentic Index\uFF09",
+        tools: toToolList(agenticModels, "agentic", "\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6307\u6570", "")
+      });
+    }
+    const speedModels = allModels.filter((m) => m.speed !== void 0 && m.speed !== null && (m.speed ?? 0) > 0).sort((a, b) => (b.speed ?? 0) - (a.speed ?? 0)).slice(0, 8);
+    if (speedModels.length > 0) {
+      rankings.push({
+        category: "\u26A1 \u901F\u5EA6\u3068\u9045\u5EF6\uFF08Output Speed\uFF09",
+        tools: toToolList(speedModels, "speed", "\u901F\u5EA6", " tok/s", false, 0)
+      });
+    }
+    const priceModels = allModels.filter((m) => m.price !== void 0 && m.price !== null && (m.price ?? 0) > 0).sort((a, b) => (a.price ?? 999) - (b.price ?? 999)).slice(0, 8);
+    if (priceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F4B0} \u4FA1\u683C\u30FB\u30B3\u30B9\u30C8\u52B9\u7387\uFF08Price per 1M tokens\uFF09",
+        tools: toToolList(priceModels, "price", "\u4FA1\u683C", "$/M", true, 4)
+      });
+    }
+  }
+  if (imageModels.length > 0) {
+    rankings.push({
+      category: "\u{1F5BC}\uFE0F \u753B\u50CF\u751F\u6210\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08ELO\u30B9\u30B3\u30A2\uFF09",
+      tools: imageModels
+    });
+  }
+  if (videoModels.length > 0) {
+    rankings.push({
+      category: "\u{1F3AC} \u52D5\u753B\u751F\u6210\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08ELO\u30B9\u30B3\u30A2\uFF09",
+      tools: videoModels
+    });
+  }
+  if (rankings.length < 2) {
+    return generateFallbackRankings();
+  }
+  return rankings;
+}
+async function generateFallbackRankings() {
+  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const response = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `\u3042\u306A\u305F\u306FAI\u696D\u754C\u306E\u30A2\u30CA\u30EA\u30B9\u30C8\u3067\u3059\u3002${today}\u6642\u70B9\u306E\u6700\u65B0AI\u30E2\u30C7\u30EB\u30E9\u30F3\u30AD\u30F3\u30B0\u3092\u65E5\u672C\u8A9E\u3067\u307E\u3068\u3081\u3066\u304F\u3060\u3055\u3044\u3002
+\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u914D\u5217\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E0D\u8981\uFF09:
+[{
+  "category": "\u30AB\u30C6\u30B4\u30EA\u540D\uFF08\u65E5\u672C\u8A9E\uFF09",
+  "tools": [
+    {
+      "rank": 1,
+      "toolName": "\u30C4\u30FC\u30EB\u540D",
+      "description": "\u7279\u5FB4\u30FB\u5F97\u610F\u306A\u3053\u3068\uFF0860\u6587\u5B57\u4EE5\u5185\uFF09",
+      "bestFor": "\u6700\u9069\u306A\u7528\u9014\uFF0830\u6587\u5B57\u4EE5\u5185\uFF09",
+      "url": "\u516C\u5F0F\u30B5\u30A4\u30C8URL",
+      "score": "\u30B9\u30B3\u30A2\u3084\u8A55\u4FA1"
+    }
+  ]
+}]
+\u4EE5\u4E0B\u306E\u30AB\u30C6\u30B4\u30EA\u3092\u542B\u3081\u3066\u304F\u3060\u3055\u3044:
+1. LLM\u77E5\u6027\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08\u4E0A\u4F4D5\u30E2\u30C7\u30EB\uFF09
+2. LLM\u30B9\u30D4\u30FC\u30C9\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08\u4E0A\u4F4D5\u30E2\u30C7\u30EB\uFF09
+3. LLM\u30B3\u30B9\u30D1\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08\u4E0A\u4F4D5\u30E2\u30C7\u30EB\uFF09
+4. \u753B\u50CF\u751F\u6210\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08\u4E0A\u4F4D5\u30E2\u30C7\u30EB\uFF09
+5. \u52D5\u753B\u751F\u6210\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08\u4E0A\u4F4D5\u30E2\u30C7\u30EB\uFF09`
+      },
+      {
+        role: "user",
+        content: `${today}\u6642\u70B9\u306E\u6700\u65B0AI\u30E2\u30C7\u30EB\u30E9\u30F3\u30AD\u30F3\u30B0\u3092\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002Artificial Analysis (artificialanalysis.ai) \u306E\u30C7\u30FC\u30BF\u3092\u53C2\u8003\u306B\u3001\u5404\u30AB\u30C6\u30B4\u30EA\u4E0A\u4F4D5\u30E2\u30C7\u30EB\u3092\u307E\u3068\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
+      }
+    ],
+    response_format: { type: "json_object" }
+  });
+  try {
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return Array.isArray(parsed) ? parsed : parsed.rankings ?? parsed.categories ?? [];
+  } catch {
+    return [];
+  }
+}
+async function fetchLedgeAiNews() {
+  let html = "";
+  try {
+    const res = await fetch("https://ledge.ai/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+  if (!html || html.length < 5e4) return [];
+  const thumbnailSuffix = "\u306E\u30B5\u30E0\u30CD\u30A4\u30EB\u753B\u50CF";
+  const patternStr = String.raw`(\d{4})<span>/<\/span>(\d{1,2})<span>/<\/span>(\d{1,2})[\s\S]{0,500}?href="(\/articles\/([^"]+))"[\s\S]{0,500}?alt="([^"]+?)(?:${thumbnailSuffix})?"`;
+  const pattern = new RegExp(patternStr, "g");
+  const articles = [];
+  const seen = /* @__PURE__ */ new Set();
+  let m;
+  while ((m = pattern.exec(html)) !== null) {
+    const [, year, month, day, urlPath, slug, title] = m;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    articles.push({
+      title,
+      url: "https://ledge.ai" + urlPath,
+      publishedAt: year + "-" + month.padStart(2, "0") + "-" + day.padStart(2, "0")
+    });
+    if (articles.length >= 20) break;
+  }
+  return articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+}
+async function generateVideoAiTools(today) {
+  const response = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `\u3042\u306A\u305F\u306FYouTube\u52D5\u753B\u5236\u4F5C\u306B\u7279\u5316\u3057\u305FAI\u30C4\u30FC\u30EB\u306E\u5C02\u9580\u5BB6\u3067\u3059\u3002\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u914D\u5217\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E0D\u8981\uFF09: [{"toolName":"\u30C4\u30FC\u30EB\u540D","category":"\u30AB\u30C6\u30B4\u30EA\uFF08\u52D5\u753B\u751F\u6210/\u52D5\u753B\u7DE8\u96C6/\u30B5\u30E0\u30CD\u30A4\u30EB/BGM/\u5B57\u5E55/\u30A8\u30D5\u30A7\u30AF\u30C8\uFF09","description":"\u30C4\u30FC\u30EB\u306E\u6982\u8981\uFF0850\u6587\u5B57\u4EE5\u5185\uFF09","useCases":["\u6D3B\u7528\u4E8B\u4F8B1","\u6D3B\u7528\u4E8B\u4F8B2","\u6D3B\u7528\u4E8B\u4F8B3"],"tips":"YouTuber\u3078\u306E\u30A2\u30C9\u30D0\u30A4\u30B9\uFF08100\u6587\u5B57\u4EE5\u5185\uFF09","url":"\u516C\u5F0F\u30B5\u30A4\u30C8URL","pricing":"\u7121\u6599/\u6709\u6599/\u30D5\u30EA\u30FC\u30DF\u30A2\u30E0"}]`
+      },
+      {
+        role: "user",
+        content: `${today}\u6642\u70B9\u3067\u306EYouTube\u52D5\u753B\u5236\u4F5C\u306B\u4F7F\u3048\u308BAI\u30C4\u30FC\u30EB\u3092\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002Kling AI\u3001DomoAI\u3001Veo3\u3001Runway\u3001Pika\u3001Sora\u3001ElevenLabs\u3001Midjourney\u3001CapCut AI\u3001Topaz Video AI\u3092\u542B\u3081\u3066\u304F\u3060\u3055\u3044\u3002\u5404\u30C4\u30FC\u30EB\u306E\u6D3B\u7528\u4E8B\u4F8B\u3068YouTuber\u3078\u306E\u30A2\u30C9\u30D0\u30A4\u30B9\u3092\u542B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
+      }
+    ],
+    response_format: { type: "json_object" }
+  });
+  try {
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return Array.isArray(parsed) ? parsed : parsed.tools ?? parsed.videoTools ?? [];
+  } catch {
+    return [];
+  }
+}
 var aiInfoRouter = router({
   /**
    * Get the latest AI daily report from DB.
-   * Returns null if no report has been generated yet.
    */
   getLatestReport: publicProcedure.query(async () => {
     const report = await getLatestAiDailyReport();
@@ -1682,96 +2175,63 @@ var aiInfoRouter = router({
       generatedAt: report.generatedAt,
       latestNews: report.latestNews ? JSON.parse(report.latestNews) : [],
       toolRankings: report.toolRankings ? JSON.parse(report.toolRankings) : [],
-      videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : []
+      videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : [],
+      ledgeNews: report.ledgeNews ? JSON.parse(report.ledgeNews) : []
     };
+  }),
+  /** Get all info sources */
+  getInfoSources: publicProcedure.query(async () => {
+    await seedDefaultInfoSources();
+    return getInfoSources();
+  }),
+  /** Add a new info source */
+  addInfoSource: publicProcedure.input(import_zod3.z.object({
+    category: import_zod3.z.enum(["youtube", "x", "website"]),
+    title: import_zod3.z.string().min(1).max(255),
+    url: import_zod3.z.string().url(),
+    memo: import_zod3.z.string().optional()
+  })).mutation(async ({ input }) => {
+    return addInfoSource(input);
+  }),
+  /** Update memo for an info source */
+  updateInfoSourceMemo: publicProcedure.input(import_zod3.z.object({
+    id: import_zod3.z.number(),
+    memo: import_zod3.z.string()
+  })).mutation(async ({ input }) => {
+    return updateInfoSourceMemo(input.id, input.memo);
+  }),
+  /** Delete an info source */
+  deleteInfoSource: publicProcedure.input(import_zod3.z.object({ id: import_zod3.z.number() })).mutation(async ({ input }) => {
+    return deleteInfoSource(input.id);
   }),
   /**
    * Verify admin password for generating reports manually.
-   * Returns true if password matches, false otherwise.
    */
-  verifyAdminPassword: publicProcedure.input(z3.object({ password: z3.string() })).mutation(async ({ input }) => {
+  verifyAdminPassword: publicProcedure.input(import_zod3.z.object({ password: import_zod3.z.string() })).mutation(async ({ input }) => {
     const expectedPassword = process.env.ADMIN_GENERATE_PASSWORD;
-    if (!expectedPassword) {
-      return { valid: false };
-    }
+    if (!expectedPassword) return { valid: false };
     return { valid: input.password === expectedPassword };
   }),
   /**
-   * Generate a fresh AI daily report using LLM.
-   * This is called by the scheduled job every morning at 7am.
+   * Generate a fresh AI daily report.
+   * - News: real articles from ai-gallery.jp (WordPress REST API)
+   * - Rankings: directly parsed from Artificial Analysis HTML
+   * - Video tools: LLM-generated with latest knowledge
    */
   generateReport: publicProcedure.mutation(async () => {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const [newsResponse, rankingsResponse, videoToolsResponse] = await Promise.all([
-      // 1. Latest AI News
-      invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `\u3042\u306A\u305F\u306FAI\u696D\u754C\u306E\u6700\u65B0\u60C5\u5831\u306B\u7CBE\u901A\u3057\u305F\u30A2\u30CA\u30EA\u30B9\u30C8\u3067\u3059\u3002\u4ECA\u65E5\u306E\u65E5\u4ED8\u306F ${today} \u3067\u3059\u3002AI\u306B\u95A2\u3059\u308B\u6700\u65B0\u30CB\u30E5\u30FC\u30B9\u30925\u4EF6\u3001JSON\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u914D\u5217\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E0D\u8981\uFF09: [{"title":"\u30CB\u30E5\u30FC\u30B9\u30BF\u30A4\u30C8\u30EB","summary":"100\u6587\u5B57\u4EE5\u5185\u306E\u8981\u7D04","category":"\u30AB\u30C6\u30B4\u30EA\uFF08\u4F8B: LLM/\u753B\u50CF\u751F\u6210/\u52D5\u753BAI/\u97F3\u58F0AI/\u30D3\u30B8\u30CD\u30B9\uFF09","impact":"high/medium/low"}]`
-          },
-          {
-            role: "user",
-            content: `${today}\u6642\u70B9\u3067\u306EAI\u6700\u65B0\u30CB\u30E5\u30FC\u30B9\u30925\u4EF6\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002ChatGPT\u3001Gemini\u3001Claude\u3001Grok\u3001Sora\u3001Kling\u3001Veo\u3001Runway\u3001Midjourney\u7B49\u306EAI\u30C4\u30FC\u30EB\u306B\u95A2\u3059\u308B\u30CB\u30E5\u30FC\u30B9\u3092\u512A\u5148\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-          }
-        ],
-        response_format: { type: "json_object" }
-      }),
-      // 2. AI Tool Rankings by Category
-      invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `\u3042\u306A\u305F\u306FAI\u30C4\u30FC\u30EB\u306E\u5C02\u9580\u5BB6\u3067\u3059\u3002\u5404\u30AB\u30C6\u30B4\u30EA\u3067\u6700\u3082\u512A\u308C\u305FAI\u30C4\u30FC\u30EB\u3092\u30E9\u30F3\u30AD\u30F3\u30B0\u5F62\u5F0F\u3067\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u914D\u5217\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E0D\u8981\uFF09: [{"category":"\u30AB\u30C6\u30B4\u30EA\u540D","tools":[{"rank":1,"toolName":"\u30C4\u30FC\u30EB\u540D","description":"\u5F97\u610F\u306A\u3053\u3068\u30FB\u7279\u5FB4\uFF0850\u6587\u5B57\u4EE5\u5185\uFF09","bestFor":"\u6700\u9069\u306A\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\uFF0830\u6587\u5B57\u4EE5\u5185\uFF09","url":"\u516C\u5F0F\u30B5\u30A4\u30C8URL"}]}]`
-          },
-          {
-            role: "user",
-            content: `\u4EE5\u4E0B\u306E\u30AB\u30C6\u30B4\u30EA\u3067\u73FE\u5728\u6700\u5F37\u306EAI\u30C4\u30FC\u30EB\u3092\u30E9\u30F3\u30AD\u30F3\u30B0\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A1.\u30EA\u30B5\u30FC\u30C1\u30FB\u60C5\u5831\u53CE\u96C6\uFF08Manus,Perplexity,ChatGPT\uFF092.\u753B\u50CF\u751F\u6210\uFF08Midjourney,DALL-E,Gemini\uFF093.\u52D5\u753B\u751F\u6210\uFF08Kling,Veo3,Sora,Runway,DomoAI\uFF094.\u30B9\u30E9\u30A4\u30C9\u30FB\u8CC7\u6599\u4F5C\u6210\uFF08Claude,Gamma\uFF095.\u6587\u7AE0\u30FB\u30B3\u30D4\u30FC\u30E9\u30A4\u30C6\u30A3\u30F3\u30B0\uFF08Claude,ChatGPT\uFF096.\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\uFF08Cursor,GitHub Copilot,Claude\uFF097.\u97F3\u58F0\u30FB\u97F3\u697D\u751F\u6210\uFF08ElevenLabs,Suno,Udio\uFF09\u5404\u30AB\u30C6\u30B4\u30EA\u4E0A\u4F4D3\u30C4\u30FC\u30EB\u3092\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-          }
-        ],
-        response_format: { type: "json_object" }
-      }),
-      // 3. Video AI Tools Use Cases
-      invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `\u3042\u306A\u305F\u306FYouTube\u52D5\u753B\u5236\u4F5C\u306B\u7279\u5316\u3057\u305FAI\u30C4\u30FC\u30EB\u306E\u5C02\u9580\u5BB6\u3067\u3059\u3002\u5FC5\u305A\u4EE5\u4E0B\u306EJSON\u914D\u5217\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4ED6\u306E\u30C6\u30AD\u30B9\u30C8\u306F\u4E0D\u8981\uFF09: [{"toolName":"\u30C4\u30FC\u30EB\u540D","category":"\u30AB\u30C6\u30B4\u30EA\uFF08\u52D5\u753B\u751F\u6210/\u52D5\u753B\u7DE8\u96C6/\u30B5\u30E0\u30CD\u30A4\u30EB/BGM/\u5B57\u5E55/\u30A8\u30D5\u30A7\u30AF\u30C8\uFF09","description":"\u30C4\u30FC\u30EB\u306E\u6982\u8981\uFF0850\u6587\u5B57\u4EE5\u5185\uFF09","useCases":["\u6D3B\u7528\u4E8B\u4F8B1","\u6D3B\u7528\u4E8B\u4F8B2","\u6D3B\u7528\u4E8B\u4F8B3"],"tips":"YouTuber\u3078\u306E\u30A2\u30C9\u30D0\u30A4\u30B9\uFF08100\u6587\u5B57\u4EE5\u5185\uFF09","url":"\u516C\u5F0F\u30B5\u30A4\u30C8URL","pricing":"\u7121\u6599/\u6709\u6599/\u30D5\u30EA\u30FC\u30DF\u30A2\u30E0"}]`
-          },
-          {
-            role: "user",
-            content: `YouTube\u52D5\u753B\u5236\u4F5C\u306B\u4F7F\u3048\u308BAI\u30C4\u30FC\u30EB\u3092\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002Kling AI\u3001DomoAI\u3001Veo3\u3001Runway\u3001Pika\u3001Sora\u3001ElevenLabs\u3001Midjourney\u3001CapCut AI\u3001Topaz Video AI\u3092\u542B\u3081\u3066\u304F\u3060\u3055\u3044\u3002\u5404\u30C4\u30FC\u30EB\u306E\u6D3B\u7528\u4E8B\u4F8B\u3068YouTuber\u3078\u306E\u30A2\u30C9\u30D0\u30A4\u30B9\u3092\u542B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
-          }
-        ],
-        response_format: { type: "json_object" }
-      })
+    const [latestNews, toolRankings, videoAiTools, ledgeNews] = await Promise.all([
+      fetchAiGalleryNews(),
+      fetchArtificialAnalysisRankings(),
+      generateVideoAiTools(today),
+      fetchLedgeAiNews()
     ]);
-    let latestNews = [];
-    try {
-      const parsed = JSON.parse(newsResponse.choices[0].message.content);
-      latestNews = Array.isArray(parsed) ? parsed : parsed.news ?? parsed.items ?? [];
-    } catch {
-      latestNews = [];
-    }
-    let toolRankings = [];
-    try {
-      const parsed = JSON.parse(rankingsResponse.choices[0].message.content);
-      toolRankings = Array.isArray(parsed) ? parsed : parsed.rankings ?? parsed.categories ?? parsed.tools ?? [];
-    } catch {
-      toolRankings = [];
-    }
-    let videoAiTools = [];
-    try {
-      const parsed = JSON.parse(videoToolsResponse.choices[0].message.content);
-      videoAiTools = Array.isArray(parsed) ? parsed : parsed.tools ?? parsed.videoTools ?? [];
-    } catch {
-      videoAiTools = [];
-    }
     await upsertAiDailyReport({
       reportDate: new Date(today),
       latestNews: JSON.stringify(latestNews),
       toolRankings: JSON.stringify(toolRankings),
       videoAiTools: JSON.stringify(videoAiTools),
+      ledgeNews: JSON.stringify(ledgeNews),
       generatedAt: /* @__PURE__ */ new Date()
     });
     return {
@@ -1779,7 +2239,8 @@ var aiInfoRouter = router({
       reportDate: today,
       newsCount: latestNews.length,
       rankingCategories: toolRankings.length,
-      videoToolsCount: videoAiTools.length
+      videoToolsCount: videoAiTools.length,
+      ledgeNewsCount: ledgeNews.length
     };
   })
 });
@@ -1800,7 +2261,7 @@ var appRouter = router({
   }),
   youtube: router({
     // Fetch channel info (name + avatar) from YouTube's internal API
-    channelInfo: publicProcedure.input(z4.object({ channelUrl: z4.string() })).query(async ({ input }) => {
+    channelInfo: publicProcedure.input(import_zod4.z.object({ channelUrl: import_zod4.z.string() })).query(async ({ input }) => {
       const { channelUrl } = input;
       let browseId = "";
       let handle = "";
@@ -1916,92 +2377,36 @@ async function createContext(opts) {
   };
 }
 
-// server/_core/index.ts
-function isPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-async function findAvailablePort(startPort = 3e3) {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
+// api/handler.ts
+var app = (0, import_express.default)();
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header("Access-Control-Allow-Origin", origin);
   }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
-async function startServer() {
-  const app = express();
-  const server = createServer(app);
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      res.header("Access-Control-Allow-Origin", origin);
-    }
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-    );
-    res.header("Access-Control-Allow-Credentials", "true");
-    if (req.method === "OPTIONS") {
-      res.sendStatus(200);
-      return;
-    }
-    next();
-  });
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerOAuthRoutes(app);
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, timestamp: Date.now() });
-  });
-  app.post("/api/ai-info/push", async (req, res) => {
-    try {
-      const apiKey = req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
-      const expectedKey = process.env.MANUS_PUSH_API_KEY;
-      if (expectedKey && apiKey !== expectedKey) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-      const { latestNews, toolRankings, videoAiTools, reportDate } = req.body;
-      if (!latestNews && !toolRankings && !videoAiTools) {
-        res.status(400).json({ error: "No data provided" });
-        return;
-      }
-      const today = reportDate ? new Date(reportDate) : /* @__PURE__ */ new Date();
-      await upsertAiDailyReport({
-        reportDate: today,
-        latestNews: typeof latestNews === "string" ? latestNews : JSON.stringify(latestNews ?? []),
-        toolRankings: typeof toolRankings === "string" ? toolRankings : JSON.stringify(toolRankings ?? []),
-        videoAiTools: typeof videoAiTools === "string" ? videoAiTools : JSON.stringify(videoAiTools ?? []),
-        generatedAt: /* @__PURE__ */ new Date()
-      });
-      console.log(`[manus-push] AI info saved for ${today.toISOString().split("T")[0]}`);
-      res.json({ success: true, savedAt: (/* @__PURE__ */ new Date()).toISOString() });
-    } catch (err) {
-      console.error("[manus-push] Error:", err);
-      res.status(500).json({ error: String(err) });
-    }
-  });
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext
-    })
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
   );
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  res.header("Access-Control-Allow-Credentials", "true");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
   }
-  server.listen(port, () => {
-    console.log(`[api] server listening on port ${port}`);
-  });
-}
-startServer().catch(console.error);
+  next();
+});
+app.use(import_express.default.json({ limit: "50mb" }));
+app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
+registerOAuthRoutes(app);
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, timestamp: Date.now() });
+});
+app.use(
+  "/api/trpc",
+  (0, import_express2.createExpressMiddleware)({
+    router: appRouter,
+    createContext
+  })
+);
+var handler_default = app;
