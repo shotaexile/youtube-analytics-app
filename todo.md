@@ -269,3 +269,6 @@
 
 ## Round 40：サブナビ表示切れ修正（ユーザー報告）
 - [x] YouTubeサブナビのラベルが上部で切れる問題を修正（paddingTop/lineHeight/overflow対応）
+
+## Round 41：サブナビをタブバー上に配置（ユーザー要望）
+- [ ] YouTubeサブナビをメインタブバーの上に移動（YouTubeタブ選択時のみ表示）
