@@ -103,12 +103,31 @@ export async function getLatestAiDailyReport() {
 export async function upsertAiDailyReport(data: InsertAiDailyReport) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(aiDailyReport).values(data).onDuplicateKeyUpdate({
-    set: {
-      latestNews: data.latestNews,
-      toolRankings: data.toolRankings,
-      videoAiTools: data.videoAiTools,
-      generatedAt: new Date(),
-    },
-  });
+
+  // Use the date string (YYYY-MM-DD) to avoid timezone issues with MySQL date type
+  // reportDate is stored as a DATE column, so we need to match it as a string
+  const dateStr = data.reportDate instanceof Date
+    ? data.reportDate.toISOString().split("T")[0]
+    : String(data.reportDate);
+
+  // Try to find existing record for this date
+  const existing = await db.select({ id: aiDailyReport.id })
+    .from(aiDailyReport)
+    .where(eq(aiDailyReport.reportDate, dateStr as unknown as Date))
+    .limit(1);
+
+  if (existing.length > 0) {
+    // Update existing record
+    await db.update(aiDailyReport)
+      .set({
+        latestNews: data.latestNews,
+        toolRankings: data.toolRankings,
+        videoAiTools: data.videoAiTools,
+        generatedAt: new Date(),
+      })
+      .where(eq(aiDailyReport.id, existing[0].id));
+  } else {
+    // Insert new record
+    await db.insert(aiDailyReport).values(data);
+  }
 }

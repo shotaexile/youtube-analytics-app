@@ -282,3 +282,11 @@
 - [x] 更新ボタンが動作しない原因を修正する（DBのreportDateにユニーク制約追加・重複データ削除）
 - [x] アプリ起動時に自動でAI情報を取得・表示する（refetchOnMount: true）
 - [x] 定期的（30分ごと）にバックグラウンドで自動更新する（refetchInterval: 30分）
+
+## Round 44：Artificial Analysis全カテゴリをツール比較に追加（ユーザー要望）
+- [x] Artificial Analysisの全カテゴリURL・スクレイピング方法を調査する
+- [x] サーバー側ai-info-router.tsに全カテゴリ取得ロジックを追加する（知能指数・AA-全知・GDPval-AA・開放性指数・情報分析・エージェント指数・速度・価格）
+- [x] DBのupsertAiDailyReportをUPDATE+INSERTロジックに修正（タイムゾーン問題解決）
+- [x] フロントエンドのツール比較UIに全カテゴリフィルターを追加（既存のフィルターチップが全カテゴリに対応済み）
+- [x] RankingCardにスコア表示を追加（scoreフィールドをカードに表示）
+- [x] セクションタイトルを「AIモデル性能比較（Artificial Analysis）」に変更

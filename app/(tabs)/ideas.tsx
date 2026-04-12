@@ -35,6 +35,7 @@ interface ToolItem {
   description: string;
   bestFor: string;
   url?: string;
+  score?: string;
 }
 
 interface RankingCategory {
@@ -157,6 +158,9 @@ function RankingCard({ category }: { category: RankingCategory }) {
               </View>
               <Text style={[styles.toolDesc, { color: colors.muted }]}>{tool.description}</Text>
               <Text style={[styles.toolBest, { color: colors.primary }]}>✓ {tool.bestFor}</Text>
+              {tool.score ? (
+                <Text style={[styles.toolScore, { color: colors.success }]}>📊 {tool.score}</Text>
+              ) : null}
             </View>
           </TouchableOpacity>
         );
@@ -520,12 +524,12 @@ export default function IdeasScreen() {
 
           {activeTab === "rankings" && (
             <>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                AIツール得意分野ランキング
-              </Text>
-              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
-                リサーチ・画像生成・スライド作成など用途別に最強ツールを一目で確認
-              </Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            AIモデル性能比較
+          </Text>
+          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+            Artificial Analysis調べ｜知能指数・GDPval・速度・価格など全カテゴリ比較
+          </Text>
               {toolRankings.length === 0 ? (
                 <Text
                   style={[
@@ -895,7 +899,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   dateText: {
-    fontSize: 10,
-    marginLeft: "auto" as unknown as number,
+    fontSize: 11,
+    marginLeft: "auto",
+  },
+  toolScore: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "500",
   },
 });

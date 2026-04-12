@@ -231,6 +231,119 @@ async function fetchAaMediaRankings(mediaType: "image" | "video"): Promise<Array
   });
 }
 
+/**
+ * Parse all model data from Artificial Analysis main page.
+ * Extracts from the escaped JSON in script tags (self.__next_f.push format).
+ * Returns models with: name, url, intelligence, speed, price, omniscience, gdpval, openness, coding, agentic
+ */
+async function fetchAaAllModels(): Promise<Array<{
+  name: string;
+  url: string;
+  intelligence?: number;
+  speed?: number;
+  price?: number;
+  omniscience?: number;
+  gdpval?: number;
+  openness?: number;
+  coding?: number;
+  agentic?: number;
+}>> {
+  let html = "";
+  try {
+    const res = await fetch("https://artificialanalysis.ai/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+
+  if (!html || html.length < 100000) return [];
+
+  // Find the script tag containing model data with safeGdpval
+  // The data is in escaped JSON format inside self.__next_f.push([1,"..."])
+  const scriptMatches = [...html.matchAll(/<script[^>]*>(self\.__next_f\.push\(.*?\))<\/script>/gs)];
+  let targetScript = "";
+  for (const match of scriptMatches) {
+    if (match[1].includes('safeGdpval') && match[1].length > 50000) {
+      targetScript = match[1];
+      break;
+    }
+  }
+
+  if (!targetScript) return [];
+
+  // Find all model entries by their id pattern
+  const idPositions: number[] = [];
+  const idPattern = /\{\\"id\\":\\"[0-9a-f-]{36}\\"/g;
+  let m: RegExpExecArray | null;
+  while ((m = idPattern.exec(targetScript)) !== null) {
+    idPositions.push(m.index);
+  }
+
+  if (idPositions.length === 0) return [];
+
+  const models: Array<{
+    name: string;
+    url: string;
+    intelligence?: number;
+    speed?: number;
+    price?: number;
+    omniscience?: number;
+    gdpval?: number;
+    openness?: number;
+    coding?: number;
+    agentic?: number;
+  }> = [];
+
+  const baseUrl = "https://artificialanalysis.ai";
+
+  for (let i = 0; i < idPositions.length; i++) {
+    const start = idPositions[i];
+    const end = i + 1 < idPositions.length ? idPositions[i + 1] : start + 5000;
+    const entry = targetScript.substring(start, end);
+
+    // Extract short_name (model name)
+    const nameMatch = /\\"short_name\\":\\"([^\\"]+)\\"/.exec(entry);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+
+    // Extract model_url
+    const urlMatch = /\\"model_url\\":\\"([^\\"]+)\\"/.exec(entry);
+    const modelUrl = urlMatch ? urlMatch[1] : null;
+
+    // Extract numeric fields
+    const extract = (pattern: RegExp): number | undefined => {
+      const m = pattern.exec(entry);
+      return m ? parseFloat(m[1]) : undefined;
+    };
+
+    const intelligence = extract(/\\"intelligence_index\\":([-\d.]+)/);
+    const speed = extract(/\\"median_output_speed\\":([-\d.]+)/);
+    const price = extract(/\\"price_1m_blended_3_to_1\\":([-\d.]+)/);
+    const omniscience = extract(/\\"omniscience\\":([-\d.]+)/);
+    const gdpval = extract(/\\"safeGdpval\\":\{\\"elo\\":([-\d.]+)/);
+    const openness = extract(/\\"opennessIndex\\":([-\d.]+)/);
+    const coding = extract(/\\"coding_index\\":([-\d.]+)/);
+    const agentic = extract(/\\"agentic_index\\":([-\d.]+)/);
+
+    models.push({
+      name,
+      url: modelUrl ? `${baseUrl}${modelUrl}` : baseUrl,
+      intelligence,
+      speed,
+      price,
+      omniscience,
+      gdpval,
+      openness,
+      coding,
+      agentic,
+    });
+  }
+
+  return models;
+}
+
 /** Fetch and parse Artificial Analysis rankings directly from HTML */
 async function fetchArtificialAnalysisRankings(): Promise<Array<{
   category: string;
@@ -243,36 +356,6 @@ async function fetchArtificialAnalysisRankings(): Promise<Array<{
     score?: string;
   }>;
 }>> {
-  let html = "";
-  try {
-    const res = await fetch("https://artificialanalysis.ai/", {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; ViewCore/1.0)" },
-    });
-    if (res.ok) html = await res.text();
-  } catch {
-    html = "";
-  }
-
-  if (!html) {
-    // Fallback: LLM-generated rankings
-    return generateFallbackRankings();
-  }
-
-  const baseUrl = "https://artificialanalysis.ai";
-
-  // Parse each ranking category
-  const intelligenceModels = parseAaDataBlock(html, "intelligenceIndex")
-    .sort((a, b) => (b.intelligenceIndex ?? 0) - (a.intelligenceIndex ?? 0))
-    .slice(0, 5);
-
-  const speedModels = parseAaDataBlock(html, "medianOutputSpeed")
-    .sort((a, b) => (b.medianOutputSpeed ?? 0) - (a.medianOutputSpeed ?? 0))
-    .slice(0, 5);
-
-  const priceModels = parseAaDataBlock(html, "pricePerMillionTokens")
-    .sort((a, b) => (a.pricePerMillionTokens ?? 999) - (b.pricePerMillionTokens ?? 999))
-    .slice(0, 5);
-
   // Model descriptions (best-effort mapping)
   const modelDescriptions: Record<string, { desc: string; bestFor: string }> = {
     "Gemini": { desc: "Googleの最新マルチモーダルLLM", bestFor: "複雑な推論・コード生成" },
@@ -286,6 +369,15 @@ async function fetchArtificialAnalysisRankings(): Promise<Array<{
     "GLM": { desc: "清華大学発の中国語対応LLM", bestFor: "中国語処理・多言語対応" },
     "Muse": { desc: "新世代クリエイティブLLM", bestFor: "創作・アイデア生成" },
     "gpt-oss": { desc: "OpenAIのオープンソース系モデル", bestFor: "高速処理・低コスト" },
+    "MiniMax": { desc: "MiniMaxの高性能マルチモーダルLLM", bestFor: "マルチモーダル・長文処理" },
+    "Qwen": { desc: "Alibabaの多言語対応LLM", bestFor: "多言語処理・コード生成" },
+    "Kimi": { desc: "Moonshot AIの長コンテキストLLM", bestFor: "超長文処理・文書分析" },
+    "K2": { desc: "MBZUAI発のオープンソースLLM", bestFor: "研究・オープン利用" },
+    "Nemotron": { desc: "NVIDIA製の高性能推論LLM", bestFor: "エンタープライズ・高速処理" },
+    "MiMo": { desc: "Xiaomi発の軽量高性能LLM", bestFor: "モバイル・エッジ推論" },
+    "Gemma": { desc: "Googleのオープンソース軽量LLM", bestFor: "ローカル実行・研究" },
+    "Solar": { desc: "Upstage発の高性能LLM", bestFor: "企業向け・文書処理" },
+    "EXAONE": { desc: "LG AI Research発のLLM", bestFor: "韓国語・多言語処理" },
   };
 
   function getModelInfo(name: string): { desc: string; bestFor: string } {
@@ -295,57 +387,147 @@ async function fetchArtificialAnalysisRankings(): Promise<Array<{
     return { desc: "高性能AIモデル", bestFor: "汎用タスク" };
   }
 
+  type ToolEntry = {
+    rank: number;
+    toolName: string;
+    description: string;
+    bestFor: string;
+    url: string;
+    score?: string;
+  };
+
   const toToolList = (
-    models: AaModel[],
-    scoreField: keyof AaModel,
+    models: Array<{ name: string; url: string; [key: string]: unknown }>,
+    scoreField: string,
     scoreLabel: string,
-    scoreUnit: string
-  ) =>
+    scoreUnit: string,
+    ascending = false,
+    decimalPlaces = 1
+  ): ToolEntry[] =>
     models.map((m, i) => {
-      const info = getModelInfo(m.modelName);
+      const info = getModelInfo(m.name);
       const scoreVal = m[scoreField] as number | undefined;
       const scoreStr = scoreVal !== undefined
-        ? `${scoreLabel}: ${scoreVal.toFixed(scoreField === "pricePerMillionTokens" ? 4 : 1)}${scoreUnit}`
+        ? `${scoreLabel}: ${scoreVal.toFixed(decimalPlaces)}${scoreUnit}`
         : undefined;
       return {
         rank: i + 1,
-        toolName: m.modelName,
+        toolName: m.name,
         description: info.desc,
         bestFor: info.bestFor,
-        url: m.detailsUrl ? `${baseUrl}${m.detailsUrl}` : baseUrl,
+        url: m.url as string,
         score: scoreStr,
       };
     });
 
-  const rankings = [];
+  const rankings: Array<{ category: string; tools: ToolEntry[] }> = [];
 
-  if (intelligenceModels.length > 0) {
-    rankings.push({
-      category: "🧠 LLM知性ランキング（Intelligence Index）",
-      tools: toToolList(intelligenceModels, "intelligenceIndex", "知性指数", ""),
-    });
-  }
-
-  if (speedModels.length > 0) {
-    rankings.push({
-      category: "⚡ LLMスピードランキング（Output Speed）",
-      tools: toToolList(speedModels, "medianOutputSpeed", "速度", " tok/s"),
-    });
-  }
-
-  if (priceModels.length > 0) {
-    rankings.push({
-      category: "💰 LLMコスパランキング（Price/M tokens）",
-      tools: toToolList(priceModels, "pricePerMillionTokens", "価格", "$/M"),
-    });
-  }
-
-  // Fetch image and video rankings from dedicated pages
-  const [imageModels, videoModels] = await Promise.all([
+  // Fetch all model data and media rankings in parallel
+  const [allModels, imageModels, videoModels] = await Promise.all([
+    fetchAaAllModels(),
     fetchAaMediaRankings("image"),
     fetchAaMediaRankings("video"),
   ]);
 
+  if (allModels.length > 0) {
+    // 1. 知能指数 (Intelligence Index)
+    const intelligenceModels = allModels
+      .filter(m => m.intelligence !== undefined && m.intelligence !== null)
+      .sort((a, b) => (b.intelligence ?? 0) - (a.intelligence ?? 0))
+      .slice(0, 8);
+    if (intelligenceModels.length > 0) {
+      rankings.push({
+        category: "🧠 知能指数（Intelligence Index）",
+        tools: toToolList(intelligenceModels, "intelligence", "知性指数", ""),
+      });
+    }
+
+    // 2. AA-全知 (Omniscience)
+    const omniscienceModels = allModels
+      .filter(m => m.omniscience !== undefined && m.omniscience !== null)
+      .sort((a, b) => (b.omniscience ?? -999) - (a.omniscience ?? -999))
+      .slice(0, 8);
+    if (omniscienceModels.length > 0) {
+      rankings.push({
+        category: "🌐 AA-全知（Omniscience Index）",
+        tools: toToolList(omniscienceModels, "omniscience", "全知指数", ""),
+      });
+    }
+
+    // 3. GDPval-AA
+    const gdpvalModels = allModels
+      .filter(m => m.gdpval !== undefined && m.gdpval !== null)
+      .sort((a, b) => (b.gdpval ?? 0) - (a.gdpval ?? 0))
+      .slice(0, 8);
+    if (gdpvalModels.length > 0) {
+      rankings.push({
+        category: "🏆 GDPval-AA（経済価値スコア）",
+        tools: toToolList(gdpvalModels, "gdpval", "ELO", "", false, 0),
+      });
+    }
+
+    // 4. 開放性指数 (Openness Index)
+    const opennessModels = allModels
+      .filter(m => m.openness !== undefined && m.openness !== null)
+      .sort((a, b) => (b.openness ?? 0) - (a.openness ?? 0))
+      .slice(0, 8);
+    if (opennessModels.length > 0) {
+      rankings.push({
+        category: "🔓 開放性指数（Openness Index）",
+        tools: toToolList(opennessModels, "openness", "開放性", ""),
+      });
+    }
+
+    // 5. 情報分析 - コーディング指数 (Coding Index)
+    const codingModels = allModels
+      .filter(m => m.coding !== undefined && m.coding !== null)
+      .sort((a, b) => (b.coding ?? 0) - (a.coding ?? 0))
+      .slice(0, 8);
+    if (codingModels.length > 0) {
+      rankings.push({
+        category: "💻 情報分析・コーディング指数（Coding Index）",
+        tools: toToolList(codingModels, "coding", "コーディング指数", ""),
+      });
+    }
+
+    // 6. エージェント指数 (Agentic Index)
+    const agenticModels = allModels
+      .filter(m => m.agentic !== undefined && m.agentic !== null)
+      .sort((a, b) => (b.agentic ?? 0) - (a.agentic ?? 0))
+      .slice(0, 8);
+    if (agenticModels.length > 0) {
+      rankings.push({
+        category: "🤖 エージェント指数（Agentic Index）",
+        tools: toToolList(agenticModels, "agentic", "エージェント指数", ""),
+      });
+    }
+
+    // 7. 出力トークン速度 (Speed)
+    const speedModels = allModels
+      .filter(m => m.speed !== undefined && m.speed !== null && (m.speed ?? 0) > 0)
+      .sort((a, b) => (b.speed ?? 0) - (a.speed ?? 0))
+      .slice(0, 8);
+    if (speedModels.length > 0) {
+      rankings.push({
+        category: "⚡ 速度と遅延（Output Speed）",
+        tools: toToolList(speedModels, "speed", "速度", " tok/s", false, 0),
+      });
+    }
+
+    // 8. コスト効率・価格 (Price)
+    const priceModels = allModels
+      .filter(m => m.price !== undefined && m.price !== null && (m.price ?? 0) > 0)
+      .sort((a, b) => (a.price ?? 999) - (b.price ?? 999))
+      .slice(0, 8);
+    if (priceModels.length > 0) {
+      rankings.push({
+        category: "💰 価格・コスト効率（Price per 1M tokens）",
+        tools: toToolList(priceModels, "price", "価格", "$/M", true, 4),
+      });
+    }
+  }
+
+  // 9. 画像生成ランキング
   if (imageModels.length > 0) {
     rankings.push({
       category: "🖼️ 画像生成ランキング（ELOスコア）",
@@ -353,6 +535,7 @@ async function fetchArtificialAnalysisRankings(): Promise<Array<{
     });
   }
 
+  // 10. 動画生成ランキング
   if (videoModels.length > 0) {
     rankings.push({
       category: "🎬 動画生成ランキング（ELOスコア）",
