@@ -314,23 +314,32 @@ export default function IdeasScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("news");
   const [refreshing, setRefreshing] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [rankingFilter, setRankingFilter] = useState<string | null>(null);
 
   const {
     data: report,
     isLoading,
     refetch,
   } = trpc.aiInfo.getLatestReport.useQuery(undefined, {
-    staleTime: 1000 * 60 * 30,
+    staleTime: 0, // Always fetch fresh data on mount
+    refetchOnMount: true,
   });
 
   const generateMutation = trpc.aiInfo.generateReport.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: async () => {
+      // Force refetch to get the newly generated data
+      await refetch();
+    },
     onSettled: () => setRefreshing(false),
   });
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await generateMutation.mutateAsync();
+    try {
+      await generateMutation.mutateAsync();
+    } catch {
+      setRefreshing(false);
+    }
   };
 
   const handlePressGenerate = () => {
@@ -351,6 +360,10 @@ export default function IdeasScreen() {
   const latestNews: NewsItem[] = (report?.latestNews as NewsItem[]) ?? [];
   const toolRankings: RankingCategory[] = (report?.toolRankings as RankingCategory[]) ?? [];
   const videoAiTools: VideoTool[] = (report?.videoAiTools as VideoTool[]) ?? [];
+  const rankingCategories = toolRankings.map((r) => r.category);
+  const filteredRankings = rankingFilter
+    ? toolRankings.filter((r) => r.category === rankingFilter)
+    : toolRankings;
 
   const reportDateStr = report?.reportDate
     ? typeof report.reportDate === "string"
@@ -502,7 +515,38 @@ export default function IdeasScreen() {
                   ランキングデータがありません
                 </Text>
               ) : (
-                toolRankings.map((cat, i) => <RankingCard key={i} category={cat} />)
+                <>
+                  {/* Category filter chips */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 12 }}
+                    contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => setRankingFilter(null)}
+                      style={[
+                        styles.filterChip,
+                        { backgroundColor: !rankingFilter ? colors.primary : colors.surface, borderColor: !rankingFilter ? colors.primary : colors.border },
+                      ]}
+                    >
+                      <Text style={[styles.filterChipText, { color: !rankingFilter ? "#fff" : colors.muted }]}>すべて</Text>
+                    </TouchableOpacity>
+                    {rankingCategories.map((cat) => (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => setRankingFilter(rankingFilter === cat ? null : cat)}
+                        style={[
+                          styles.filterChip,
+                          { backgroundColor: rankingFilter === cat ? colors.primary : colors.surface, borderColor: rankingFilter === cat ? colors.primary : colors.border },
+                        ]}
+                      >
+                        <Text style={[styles.filterChipText, { color: rankingFilter === cat ? "#fff" : colors.muted }]}>{cat}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  {filteredRankings.map((cat, i) => <RankingCard key={i} category={cat} />)}
+                </>
               )}
             </>
           )}
@@ -818,5 +862,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
 });

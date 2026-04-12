@@ -63,13 +63,13 @@ const VIDEO_FILTERS: { key: VideoFilter; label: string; color: string }[] = [
 // ─── YouTube Sub-Nav ─────────────────────────────────────────────────────────
 type YoutubeTab = 'dashboard' | 'rankings' | 'charts' | 'videos' | 'ai' | 'early-stats';
 
-const YOUTUBE_TABS: { key: YoutubeTab; label: string }[] = [
-  { key: 'dashboard', label: 'ダッシュボード' },
-  { key: 'rankings', label: 'ランキング' },
-  { key: 'charts', label: 'グラフ' },
-  { key: 'videos', label: '動画一覧' },
-  { key: 'ai', label: 'AI分析' },
-  { key: 'early-stats', label: '初速' },
+const YOUTUBE_TABS: { key: YoutubeTab; label: string; icon: string }[] = [
+  { key: 'dashboard', label: 'TOP', icon: '🏠' },
+  { key: 'rankings', label: 'ランキング', icon: '🏆' },
+  { key: 'charts', label: 'グラフ', icon: '📈' },
+  { key: 'videos', label: '動画', icon: '🎥' },
+  { key: 'ai', label: 'AI分析', icon: '🤖' },
+  { key: 'early-stats', label: '初速', icon: '⚡' },
 ];
 
 function YoutubeSubNav({ active, onChange }: { active: YoutubeTab; onChange: (t: YoutubeTab) => void }) {
@@ -89,6 +89,7 @@ function YoutubeSubNav({ active, onChange }: { active: YoutubeTab; onChange: (t:
             active === t.key && ytStyles.subNavItemActive,
           ]}
         >
+          <Text style={ytStyles.subNavIcon}>{t.icon}</Text>
           <Text
             style={[
               ytStyles.subNavText,
@@ -108,28 +109,35 @@ const ytStyles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 0.5,
     borderBottomColor: '#E5E5E5',
-    maxHeight: 44,
+    maxHeight: 60,
   },
   subNavContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
     flexDirection: 'row',
     alignItems: 'center',
   },
   subNavItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
     backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    minWidth: 48,
   },
   subNavItemActive: {
     backgroundColor: '#FF0000',
   },
+  subNavIcon: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
   subNavText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#606060',
+    lineHeight: 14,
   },
   subNavTextActive: {
     color: '#fff',
