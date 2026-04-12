@@ -43,6 +43,13 @@
       "when": 1775997689544,
       "tag": "0005_fast_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1776002463420,
+      "tag": "0006_dazzling_silk_fever",
+      "breakpoints": true
     }
   ]
 }

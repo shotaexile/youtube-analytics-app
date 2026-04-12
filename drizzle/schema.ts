@@ -159,8 +159,27 @@ export const aiDailyReport = mysqlTable("ai_daily_report", {
   toolRankings: text("toolRankings"),
   // JSON string: { toolName, category, useCases, tips }[]
   videoAiTools: text("videoAiTools"),
+  // JSON string: { title, url, publishedAt }[] from ledge.ai
+  ledgeNews: text("ledgeNews"),
   generatedAt: timestamp("generatedAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type AiDailyReport = typeof aiDailyReport.$inferSelect;
 export type InsertAiDailyReport = typeof aiDailyReport.$inferInsert;
+
+/**
+ * AI information sources - user-curated list of AI info channels/sites
+ * Shared across all app users, editable from the app
+ */
+export const infoSources = mysqlTable("info_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  category: mysqlEnum("category", ["youtube", "x", "website"]).notNull().default("website"),
+  title: varchar("title", { length: 255 }).notNull(),
+  url: varchar("url", { length: 512 }).notNull(),
+  memo: text("memo"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type InfoSource = typeof infoSources.$inferSelect;
+export type InsertInfoSource = typeof infoSources.$inferInsert;

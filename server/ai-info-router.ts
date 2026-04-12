@@ -1,6 +1,6 @@
 import { publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
-import { getLatestAiDailyReport, upsertAiDailyReport } from "./db";
+import { getLatestAiDailyReport, upsertAiDailyReport, getInfoSources, addInfoSource, updateInfoSourceMemo, deleteInfoSource, seedDefaultInfoSources } from "./db";
 import { z } from "zod";
 
 /**
@@ -606,6 +606,51 @@ async function generateFallbackRankings(): Promise<Array<{
   }
 }
 
+// ─── Ledge.ai News ───────────────────────────────────────────────────────────
+
+/** Fetch latest AI news from ledge.ai by scraping HTML */
+async function fetchLedgeAiNews(): Promise<Array<{
+  title: string;
+  url: string;
+  publishedAt: string;
+}>> {
+  let html = "";
+  try {
+    const res = await fetch("https://ledge.ai/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+
+  if (!html || html.length < 50000) return [];
+
+  // Pattern: date div -> article link with alt text as title
+  // Using new RegExp to avoid issues with non-ASCII in regex literals
+  const thumbnailSuffix = "\u306e\u30b5\u30e0\u30cd\u30a4\u30eb\u753b\u50cf"; // のサムネイル画像
+  const patternStr = String.raw`(\d{4})<span>/<\/span>(\d{1,2})<span>/<\/span>(\d{1,2})[\s\S]{0,500}?href="(\/articles\/([^"]+))"[\s\S]{0,500}?alt="([^"]+?)(?:${thumbnailSuffix})?"`;
+  const pattern = new RegExp(patternStr, "g");
+
+  const articles: Array<{ title: string; url: string; publishedAt: string }> = [];
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+
+  while ((m = pattern.exec(html)) !== null) {
+    const [, year, month, day, urlPath, slug, title] = m;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    articles.push({
+      title,
+      url: "https://ledge.ai" + urlPath,
+      publishedAt: year + "-" + month.padStart(2, "0") + "-" + day.padStart(2, "0"),
+    });
+    if (articles.length >= 20) break;
+  }
+
+  return articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+}
+
 // ─── Video AI Tools ───────────────────────────────────────────────────────────
 
 /** Generate video AI tools info using LLM */
@@ -648,8 +693,45 @@ export const aiInfoRouter = router({
       latestNews: report.latestNews ? JSON.parse(report.latestNews) : [],
       toolRankings: report.toolRankings ? JSON.parse(report.toolRankings) : [],
       videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : [],
+      ledgeNews: report.ledgeNews ? JSON.parse(report.ledgeNews) : [],
     };
   }),
+
+  /** Get all info sources */
+  getInfoSources: publicProcedure.query(async () => {
+    // Seed defaults if empty
+    await seedDefaultInfoSources();
+    return getInfoSources();
+  }),
+
+  /** Add a new info source */
+  addInfoSource: publicProcedure
+    .input(z.object({
+      category: z.enum(["youtube", "x", "website"]),
+      title: z.string().min(1).max(255),
+      url: z.string().url(),
+      memo: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return addInfoSource(input);
+    }),
+
+  /** Update memo for an info source */
+  updateInfoSourceMemo: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      memo: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      return updateInfoSourceMemo(input.id, input.memo);
+    }),
+
+  /** Delete an info source */
+  deleteInfoSource: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      return deleteInfoSource(input.id);
+    }),
 
   /**
    * Verify admin password for generating reports manually.
@@ -671,11 +753,12 @@ export const aiInfoRouter = router({
   generateReport: publicProcedure.mutation(async () => {
     const today = new Date().toISOString().split("T")[0];
 
-    // Run all three in parallel
-    const [latestNews, toolRankings, videoAiTools] = await Promise.all([
+    // Run all four in parallel
+    const [latestNews, toolRankings, videoAiTools, ledgeNews] = await Promise.all([
       fetchAiGalleryNews(),
       fetchArtificialAnalysisRankings(),
       generateVideoAiTools(today),
+      fetchLedgeAiNews(),
     ]);
 
     // Save to DB
@@ -684,6 +767,7 @@ export const aiInfoRouter = router({
       latestNews: JSON.stringify(latestNews),
       toolRankings: JSON.stringify(toolRankings),
       videoAiTools: JSON.stringify(videoAiTools),
+      ledgeNews: JSON.stringify(ledgeNews),
       generatedAt: new Date(),
     });
 
@@ -693,6 +777,7 @@ export const aiInfoRouter = router({
       newsCount: latestNews.length,
       rankingCategories: toolRankings.length,
       videoToolsCount: videoAiTools.length,
+      ledgeNewsCount: ledgeNews.length,
     };
   }),
 });

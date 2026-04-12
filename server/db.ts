@@ -1,6 +1,6 @@
-import { eq, desc } from "drizzle-orm";
+import { DrizzleError, eq, desc, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, aiDailyReport, InsertAiDailyReport } from "../drizzle/schema";
+import { InsertUser, users, aiDailyReport, InsertAiDailyReport, infoSources, InsertInfoSource } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -97,6 +97,72 @@ export async function getLatestAiDailyReport() {
   if (!db) return null;
   const rows = await db.select().from(aiDailyReport).orderBy(desc(aiDailyReport.reportDate)).limit(1);
   return rows[0] ?? null;
+}
+
+// ─── Info Sources ────────────────────────────────────────────────────────────
+
+/** Get all info sources ordered by category and sortOrder */
+export async function getInfoSources() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(infoSources).orderBy(asc(infoSources.category), asc(infoSources.sortOrder), asc(infoSources.id));
+}
+
+/** Add a new info source */
+export async function addInfoSource(data: Pick<InsertInfoSource, "category" | "title" | "url" | "memo">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(infoSources).values({
+    category: data.category,
+    title: data.title,
+    url: data.url,
+    memo: data.memo ?? null,
+    sortOrder: 999,
+  });
+  return result;
+}
+
+/** Update memo for an info source */
+export async function updateInfoSourceMemo(id: number, memo: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(infoSources).set({ memo }).where(eq(infoSources.id, id));
+}
+
+/** Delete an info source */
+export async function deleteInfoSource(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(infoSources).where(eq(infoSources.id, id));
+}
+
+/** Seed default info sources if the table is empty */
+export async function seedDefaultInfoSources() {
+  const db = await getDb();
+  if (!db) return;
+
+  const existing = await db.select({ id: infoSources.id }).from(infoSources).limit(1);
+  if (existing.length > 0) return; // already seeded
+
+  const defaults: InsertInfoSource[] = [
+    // YouTube
+    { category: "youtube", title: "KEITO【AI&WEB ch】", url: "https://www.youtube.com/@keitoaiweb", sortOrder: 1 },
+    { category: "youtube", title: "動画編集の中の人", url: "https://www.youtube.com/@%E5%8B%95%E7%94%BB%E7%B7%A8%E9%9B%86%E3%81%AE%E4%B8%AD%E3%81%AE%E4%BA%BA", sortOrder: 2 },
+    { category: "youtube", title: "AI様の下僕", url: "https://www.youtube.com/@AI-geboku", sortOrder: 3 },
+    { category: "youtube", title: "AI大学【AI&ChatGPT最新情報】", url: "https://www.youtube.com/@AIAIChatGPT-cj4sh/videos", sortOrder: 4 },
+    { category: "youtube", title: "チャエン【AI研究所】～仕事で使える最新のAI情報を発信～ Byデジライズ", url: "https://www.youtube.com/@chaen-ai-lab", sortOrder: 5 },
+    { category: "youtube", title: "いけともch", url: "https://www.youtube.com/@iketomo-ch/videos", sortOrder: 6 },
+    // X
+    { category: "x", title: "Ledge.ai | AIトレンドの鉱脆", url: "https://x.com/ledgeai?s=20", sortOrder: 1 },
+    { category: "x", title: "AI様の下僕", url: "https://x.com/aigeboku?s=20", sortOrder: 2 },
+    // Website
+    { category: "website", title: "There's An AI For That (TAAFT)", url: "https://theresanaiforthat.com/", sortOrder: 1 },
+    { category: "website", title: "Artificial Analysis", url: "https://artificialanalysis.ai/#media-leaderboards", sortOrder: 2 },
+    { category: "website", title: "AIsmiley", url: "https://aismiley.co.jp/", sortOrder: 3 },
+    { category: "website", title: "Ladge.ai", url: "https://ledge.ai/", sortOrder: 4 },
+  ];
+
+  await db.insert(infoSources).values(defaults);
 }
 
 /** Upsert AI daily report for a given date */

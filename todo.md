@@ -290,3 +290,14 @@
 - [x] フロントエンドのツール比較UIに全カテゴリフィルターを追加（既存のフィルターチップが全カテゴリに対応済み）
 - [x] RankingCardにスコア表示を追加（scoreフィールドをカードに表示）
 - [x] セクションタイトルを「AIモデル性能比較（Artificial Analysis）」に変更
+
+## Round 45：AIタブ4機能追加（ユーザー要望）
+- [x] 「動画AI」サブタブを「ツール一覧」に変更し、ジャンル別AIツール一覧（公式リンク付き）を実装する
+- [x] 「最新ニュース」サブタブを「最新記事」に改名する（ai-gallery.jpからの取得は変更なし）
+- [x] 「最新ニュース」サブタブを新規追加し、ledge.aiから最新ニュースを取得・表示する（タイトルリンク付き）
+- [x] 「情報ソース」サブタブを追加し、YouTube・X・ウェブサイトの情報ソース一覧を表示する
+- [x] 情報ソースにアプリから追加・備考メモ入力できる機能を実装する
+- [x] デフォルト情報ソース12件をDBにシード（KEITO AI ch・動画編集の中の人・AI様の下僕等）
+- [x] ledge.aiスクレイピング関数をサーバーに追加（fetchLedgeAiNews）
+- [x] DBスキーマにinfoSourcesテーブルとledgeNewsカラムを追加・マイグレーション実行
+- [x] 情報ソースCRUD（getInfoSources・addInfoSource・updateInfoSourceMemo・deleteInfoSource）をサーバーに追加

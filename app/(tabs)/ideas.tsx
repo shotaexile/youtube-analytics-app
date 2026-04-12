@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  FlatList,
+  Alert,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
@@ -29,6 +31,12 @@ interface NewsItem {
   publishedAt?: string;
 }
 
+interface LedgeNewsItem {
+  title: string;
+  url: string;
+  publishedAt: string;
+}
+
 interface ToolItem {
   rank: number;
   toolName: string;
@@ -43,21 +51,135 @@ interface RankingCategory {
   tools: ToolItem[];
 }
 
-interface VideoTool {
-  toolName: string;
-  category: string;
+interface AiTool {
+  name: string;
+  url: string;
   description: string;
-  useCases: string[];
-  tips: string;
-  url?: string;
-  pricing: string;
+  pricing?: string;
 }
+
+interface AiToolGenre {
+  genre: string;
+  emoji: string;
+  tools: AiTool[];
+}
+
+interface InfoSource {
+  id: number;
+  category: "youtube" | "x" | "website";
+  title: string;
+  url: string;
+  memo: string | null;
+}
+
+// ─── Static AI Tool List ──────────────────────────────────────────────────────
+
+const AI_TOOL_GENRES: AiToolGenre[] = [
+  {
+    genre: "動画生成",
+    emoji: "🎬",
+    tools: [
+      { name: "Sora", url: "https://sora.com/", description: "OpenAIの動画生成AI。テキストから高品質な動画を生成", pricing: "有料" },
+      { name: "Kling AI", url: "https://klingai.com/", description: "中国発の高品質動画生成AI。リアルな動きが得意", pricing: "フリーミアム" },
+      { name: "Runway Gen-3", url: "https://runwayml.com/", description: "プロ向け動画生成・編集AI。映像制作に特化", pricing: "フリーミアム" },
+      { name: "Veo 3", url: "https://deepmind.google/technologies/veo/", description: "Google DeepMindの最新動画生成AI", pricing: "有料" },
+      { name: "Domo AI", url: "https://domoai.app/", description: "アニメ・イラスト風動画変換に特化したAI", pricing: "フリーミアム" },
+      { name: "Pika Labs", url: "https://pika.art/", description: "テキスト・画像から動画を生成するAI", pricing: "フリーミアム" },
+      { name: "Hailuo AI", url: "https://hailuoai.video/", description: "MiniMaxの動画生成AI。高品質な映像表現", pricing: "フリーミアム" },
+      { name: "Luma Dream Machine", url: "https://lumalabs.ai/dream-machine", description: "リアルな動きと物理表現が得意な動画AI", pricing: "フリーミアム" },
+      { name: "Wan 2.1", url: "https://wan.video/", description: "Alibabaの動画生成AI。オープンソース版あり", pricing: "フリーミアム" },
+    ],
+  },
+  {
+    genre: "画像生成",
+    emoji: "🖼️",
+    tools: [
+      { name: "Midjourney", url: "https://www.midjourney.com/", description: "最高品質の画像生成AI。アーティスティックな表現が得意", pricing: "有料" },
+      { name: "DALL-E 3", url: "https://openai.com/dall-e-3", description: "OpenAIの画像生成AI。ChatGPTと連携可能", pricing: "有料" },
+      { name: "Stable Diffusion", url: "https://stability.ai/", description: "オープンソースの画像生成AI。カスタマイズ自由", pricing: "無料/有料" },
+      { name: "Adobe Firefly", url: "https://firefly.adobe.com/", description: "Adobe製の商用利用安全な画像生成AI", pricing: "フリーミアム" },
+      { name: "Ideogram", url: "https://ideogram.ai/", description: "テキスト入り画像生成が得意なAI", pricing: "フリーミアム" },
+      { name: "Flux", url: "https://blackforestlabs.ai/", description: "Black Forest Labsの高品質画像生成AI", pricing: "フリーミアム" },
+      { name: "Leonardo AI", url: "https://leonardo.ai/", description: "ゲーム・クリエイティブ向け画像生成AI", pricing: "フリーミアム" },
+      { name: "Canva AI", url: "https://www.canva.com/ai-image-generator/", description: "デザインツールCanvaに統合された画像生成AI", pricing: "フリーミアム" },
+    ],
+  },
+  {
+    genre: "音楽生成",
+    emoji: "🎵",
+    tools: [
+      { name: "Suno AI", url: "https://suno.com/", description: "テキストから楽曲を丸ごと生成するAI。歌詞・メロディ・ボーカル込み", pricing: "フリーミアム" },
+      { name: "Udio", url: "https://www.udio.com/", description: "高品質な音楽生成AI。多様なジャンルに対応", pricing: "フリーミアム" },
+      { name: "Stable Audio", url: "https://stability.ai/stable-audio", description: "Stability AIの音楽・効果音生成AI", pricing: "フリーミアム" },
+      { name: "MusicGen", url: "https://huggingface.co/facebook/musicgen-large", description: "Metaのオープンソース音楽生成AI", pricing: "無料" },
+      { name: "Mubert", url: "https://mubert.com/", description: "BGM・ループ音楽生成に特化したAI", pricing: "フリーミアム" },
+    ],
+  },
+  {
+    genre: "テキスト生成",
+    emoji: "✍️",
+    tools: [
+      { name: "ChatGPT", url: "https://chat.openai.com/", description: "OpenAIの汎用AIチャット。最も普及したAIアシスタント", pricing: "フリーミアム" },
+      { name: "Claude", url: "https://claude.ai/", description: "Anthropicの高性能AI。長文処理・コーディングが得意", pricing: "フリーミアム" },
+      { name: "Gemini", url: "https://gemini.google.com/", description: "Googleの最新AI。マルチモーダル対応", pricing: "フリーミアム" },
+      { name: "Grok", url: "https://grok.x.ai/", description: "xAI（イーロン・マスク）のAI。リアルタイム情報に強い", pricing: "フリーミアム" },
+      { name: "Perplexity", url: "https://www.perplexity.ai/", description: "AI検索エンジン。ソース付きで情報を提供", pricing: "フリーミアム" },
+      { name: "Notion AI", url: "https://www.notion.so/product/ai", description: "Notionに統合されたAIライティングアシスタント", pricing: "有料" },
+      { name: "Jasper", url: "https://www.jasper.ai/", description: "マーケティング・コピーライティング特化AI", pricing: "有料" },
+    ],
+  },
+  {
+    genre: "コーディング",
+    emoji: "💻",
+    tools: [
+      { name: "GitHub Copilot", url: "https://github.com/features/copilot", description: "GitHubのAIコーディングアシスタント。コード補完・生成", pricing: "有料" },
+      { name: "Cursor", url: "https://cursor.sh/", description: "AI統合コードエディタ。コードベース全体を理解して支援", pricing: "フリーミアム" },
+      { name: "Windsurf", url: "https://codeium.com/windsurf", description: "Codeiumのエージェント型AIコードエディタ", pricing: "フリーミアム" },
+      { name: "v0", url: "https://v0.dev/", description: "VercelのUI生成AI。テキストからReactコンポーネントを生成", pricing: "フリーミアム" },
+      { name: "Bolt.new", url: "https://bolt.new/", description: "ブラウザ上でフルスタックアプリを生成するAI", pricing: "フリーミアム" },
+      { name: "Replit AI", url: "https://replit.com/", description: "クラウドIDEに統合されたAIコーディング支援", pricing: "フリーミアム" },
+    ],
+  },
+  {
+    genre: "音声・翻訳",
+    emoji: "🎤",
+    tools: [
+      { name: "ElevenLabs", url: "https://elevenlabs.io/", description: "高品質な音声合成AI。声のクローンも可能", pricing: "フリーミアム" },
+      { name: "Whisper", url: "https://openai.com/research/whisper", description: "OpenAIの音声認識AI。多言語対応", pricing: "無料" },
+      { name: "DeepL", url: "https://www.deepl.com/", description: "高精度AI翻訳ツール。ビジネス文書に強い", pricing: "フリーミアム" },
+      { name: "HeyGen", url: "https://www.heygen.com/", description: "AIアバター動画・音声翻訳ツール", pricing: "フリーミアム" },
+      { name: "Descript", url: "https://www.descript.com/", description: "テキスト編集で動画・音声を編集できるAIツール", pricing: "フリーミアム" },
+    ],
+  },
+  {
+    genre: "業務効率化",
+    emoji: "⚡",
+    tools: [
+      { name: "Zapier AI", url: "https://zapier.com/", description: "業務自動化ツール。AIでワークフローを構築", pricing: "フリーミアム" },
+      { name: "Make (Integromat)", url: "https://www.make.com/", description: "ノーコード自動化プラットフォーム", pricing: "フリーミアム" },
+      { name: "Gamma", url: "https://gamma.app/", description: "AIでプレゼン・資料を自動生成するツール", pricing: "フリーミアム" },
+      { name: "Beautiful.ai", url: "https://www.beautiful.ai/", description: "AIが自動でデザインするプレゼンツール", pricing: "有料" },
+      { name: "Otter.ai", url: "https://otter.ai/", description: "会議の音声をAIでリアルタイム文字起こし", pricing: "フリーミアム" },
+      { name: "Fireflies.ai", url: "https://fireflies.ai/", description: "会議録音・要約・検索ができるAIツール", pricing: "フリーミアム" },
+    ],
+  },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function openUrl(url?: string) {
   if (!url) return;
   Linking.openURL(url).catch(() => {});
+}
+
+function formatDate(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+  } catch {
+    return dateStr;
+  }
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -82,22 +204,12 @@ function ImpactBadge({ impact }: { impact: string }) {
   );
 }
 
-function NewsCard({ item }: { item: NewsItem }) {
+/** ai-gallery.jp article card */
+function ArticleCard({ item }: { item: NewsItem }) {
   const colors = useColors();
   const linkUrl = item.url ?? item.sourceUrl;
   const hasLink = !!linkUrl;
-
-  // Format publishedAt date for display
-  const dateStr = item.publishedAt
-    ? (() => {
-        try {
-          const d = new Date(item.publishedAt);
-          return d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
-        } catch {
-          return item.publishedAt;
-        }
-      })()
-    : null;
+  const dateStr = formatDate(item.publishedAt);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -122,6 +234,28 @@ function NewsCard({ item }: { item: NewsItem }) {
       )}
       <Text style={[styles.cardBody, { color: colors.muted }]}>{item.summary}</Text>
     </View>
+  );
+}
+
+/** ledge.ai news card */
+function LedgeNewsCard({ item }: { item: LedgeNewsItem }) {
+  const colors = useColors();
+  const dateStr = formatDate(item.publishedAt);
+
+  return (
+    <TouchableOpacity
+      onPress={() => openUrl(item.url)}
+      activeOpacity={0.75}
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    >
+      {dateStr ? (
+        <Text style={[styles.dateText, { color: colors.muted, marginBottom: 6 }]}>{dateStr}</Text>
+      ) : null}
+      <Text style={[styles.cardTitle, styles.linkTitle, { color: colors.primary }]}>
+        {item.title}
+      </Text>
+      <Text style={[styles.linkHint, { color: colors.muted }]}>🔗 ledge.ai で読む</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -169,60 +303,81 @@ function RankingCard({ category }: { category: RankingCategory }) {
   );
 }
 
-function VideoToolCard({ tool }: { tool: VideoTool }) {
+/** AI tool card for the tool list tab */
+function AiToolCard({ tool }: { tool: AiTool }) {
   const colors = useColors();
   const pricingColor =
     tool.pricing === "無料"
       ? colors.success
       : tool.pricing === "フリーミアム"
       ? colors.warning
+      : tool.pricing === "有料"
+      ? colors.error
       : colors.muted;
-  const hasLink = !!tool.url;
 
   return (
     <TouchableOpacity
-      onPress={() => hasLink && openUrl(tool.url)}
-      activeOpacity={hasLink ? 0.85 : 1}
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      onPress={() => openUrl(tool.url)}
+      activeOpacity={0.75}
+      style={[styles.toolCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
-      <View style={styles.cardHeader}>
-        <View style={[styles.categoryTag, { backgroundColor: colors.primary + "22" }]}>
-          <Text style={[styles.categoryText, { color: colors.primary }]}>{tool.category}</Text>
-        </View>
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: pricingColor + "22", borderColor: pricingColor, borderWidth: 1 },
-          ]}
-        >
-          <Text style={[styles.badgeText, { color: pricingColor }]}>{tool.pricing}</Text>
-        </View>
-        {hasLink && (
-          <View style={[styles.badge, { backgroundColor: colors.primary + "22", borderColor: colors.primary, borderWidth: 1 }]}>
-            <Text style={[styles.badgeText, { color: colors.primary }]}>🔗 公式サイト</Text>
+      <View style={styles.toolCardHeader}>
+        <Text style={[styles.toolCardName, { color: colors.primary }]}>{tool.name}</Text>
+        {tool.pricing ? (
+          <View style={[styles.badge, { backgroundColor: pricingColor + "22", borderColor: pricingColor, borderWidth: 1 }]}>
+            <Text style={[styles.badgeText, { color: pricingColor }]}>{tool.pricing}</Text>
           </View>
-        )}
+        ) : null}
       </View>
-      <Text style={[styles.cardTitle, { color: colors.foreground }]}>{tool.toolName}</Text>
-      <Text style={[styles.cardBody, { color: colors.muted }]}>{tool.description}</Text>
-      <View style={styles.useCaseList}>
-        {(tool.useCases ?? []).map((uc, i) => (
-          <Text key={i} style={[styles.useCaseItem, { color: colors.foreground }]}>
-            • {uc}
-          </Text>
-        ))}
-      </View>
-      {tool.tips ? (
-        <View
-          style={[
-            styles.tipBox,
-            { backgroundColor: colors.primary + "11", borderLeftColor: colors.primary },
-          ]}
+      <Text style={[styles.toolCardDesc, { color: colors.muted }]}>{tool.description}</Text>
+      <Text style={[styles.toolCardLink, { color: colors.primary }]}>🔗 公式サイトを開く</Text>
+    </TouchableOpacity>
+  );
+}
+
+/** Info source card */
+function InfoSourceCard({
+  source,
+  onEditMemo,
+  onDelete,
+}: {
+  source: InfoSource;
+  onEditMemo: (source: InfoSource) => void;
+  onDelete: (id: number) => void;
+}) {
+  const colors = useColors();
+  const catEmoji = source.category === "youtube" ? "▶️" : source.category === "x" ? "𝕏" : "🌐";
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.sourceCardHeader}>
+        <Text style={[styles.sourceEmoji]}>{catEmoji}</Text>
+        <TouchableOpacity onPress={() => openUrl(source.url)} activeOpacity={0.7} style={styles.sourceTitleWrap}>
+          <Text style={[styles.sourceTitle, { color: colors.primary }]}>{source.title}</Text>
+          <Text style={[styles.sourceUrl, { color: colors.muted }]} numberOfLines={1}>{source.url}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => onDelete(source.id)}
+          style={styles.deleteBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={[styles.tipText, { color: colors.foreground }]}>💡 {tool.tips}</Text>
+          <Text style={[styles.deleteBtnText, { color: colors.error }]}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      {source.memo ? (
+        <View style={[styles.memoBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Text style={[styles.memoText, { color: colors.foreground }]}>{source.memo}</Text>
         </View>
       ) : null}
-    </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => onEditMemo(source)}
+        style={[styles.memoEditBtn, { borderColor: colors.border }]}
+      >
+        <Text style={[styles.memoEditBtnText, { color: colors.muted }]}>
+          {source.memo ? "📝 備考を編集" : "📝 備考を追加"}
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -325,37 +480,222 @@ function AdminPasswordModal({
   );
 }
 
+// ─── Add Source Modal ─────────────────────────────────────────────────────────
+
+function AddSourceModal({
+  visible,
+  onClose,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (data: { category: "youtube" | "x" | "website"; title: string; url: string; memo?: string }) => void;
+}) {
+  const colors = useColors();
+  const [category, setCategory] = useState<"youtube" | "x" | "website">("website");
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [memo, setMemo] = useState("");
+  const [error, setError] = useState("");
+
+  const handleAdd = () => {
+    if (!title.trim()) { setError("タイトルを入力してください"); return; }
+    if (!url.trim()) { setError("URLを入力してください"); return; }
+    if (!url.startsWith("http")) { setError("URLはhttpまたはhttpsで始めてください"); return; }
+    onAdd({ category, title: title.trim(), url: url.trim(), memo: memo.trim() || undefined });
+    setTitle(""); setUrl(""); setMemo(""); setError("");
+    onClose();
+  };
+
+  const handleClose = () => {
+    setTitle(""); setUrl(""); setMemo(""); setError("");
+    onClose();
+  };
+
+  const cats: { key: "youtube" | "x" | "website"; label: string }[] = [
+    { key: "youtube", label: "YouTube" },
+    { key: "x", label: "X (Twitter)" },
+    { key: "website", label: "ウェブサイト" },
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalOverlay}
+      >
+        <View style={[styles.modalBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.foreground }]}>情報ソースを追加</Text>
+
+          {/* Category selector */}
+          <View style={styles.catSelector}>
+            {cats.map((c) => (
+              <TouchableOpacity
+                key={c.key}
+                onPress={() => setCategory(c.key)}
+                style={[
+                  styles.catChip,
+                  { backgroundColor: category === c.key ? colors.primary : colors.background, borderColor: category === c.key ? colors.primary : colors.border },
+                ]}
+              >
+                <Text style={[styles.catChipText, { color: category === c.key ? "#fff" : colors.muted }]}>{c.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TextInput
+            style={[styles.passwordInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            placeholder="タイトル（例：KEITO AI ch）"
+            placeholderTextColor={colors.muted}
+            value={title}
+            onChangeText={(t) => { setTitle(t); setError(""); }}
+            returnKeyType="next"
+          />
+          <TextInput
+            style={[styles.passwordInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            placeholder="URL（https://...）"
+            placeholderTextColor={colors.muted}
+            value={url}
+            onChangeText={(t) => { setUrl(t); setError(""); }}
+            returnKeyType="next"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextInput
+            style={[styles.passwordInput, styles.memoInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            placeholder="備考（任意）"
+            placeholderTextColor={colors.muted}
+            value={memo}
+            onChangeText={setMemo}
+            returnKeyType="done"
+            multiline
+            numberOfLines={3}
+          />
+          {error ? (
+            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+          ) : null}
+          <View style={styles.modalButtons}>
+            <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: colors.border }]} onPress={handleClose}>
+              <Text style={[styles.modalCancelText, { color: colors.muted }]}>キャンセル</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalConfirmBtn, { backgroundColor: colors.primary }]} onPress={handleAdd}>
+              <Text style={styles.modalConfirmText}>追加</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Edit Memo Modal ──────────────────────────────────────────────────────────
+
+function EditMemoModal({
+  visible,
+  source,
+  onClose,
+  onSave,
+}: {
+  visible: boolean;
+  source: InfoSource | null;
+  onClose: () => void;
+  onSave: (id: number, memo: string) => void;
+}) {
+  const colors = useColors();
+  const [memo, setMemo] = useState(source?.memo ?? "");
+
+  // Sync memo when source changes
+  useState(() => { setMemo(source?.memo ?? ""); });
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalOverlay}
+      >
+        <View style={[styles.modalBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.foreground }]}>備考を編集</Text>
+          {source ? (
+            <Text style={[styles.modalDesc, { color: colors.muted }]}>{source.title}</Text>
+          ) : null}
+          <TextInput
+            style={[styles.passwordInput, styles.memoInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+            placeholder="備考を入力（メモ・感想・使い方など）"
+            placeholderTextColor={colors.muted}
+            value={memo}
+            onChangeText={setMemo}
+            multiline
+            numberOfLines={5}
+            autoFocus
+          />
+          <View style={styles.modalButtons}>
+            <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: colors.border }]} onPress={onClose}>
+              <Text style={[styles.modalCancelText, { color: colors.muted }]}>キャンセル</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalConfirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => { if (source) { onSave(source.id, memo); onClose(); } }}
+            >
+              <Text style={styles.modalConfirmText}>保存</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
-type Tab = "news" | "rankings" | "video";
+type Tab = "articles" | "news" | "rankings" | "tools" | "sources";
 
 export default function IdeasScreen() {
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<Tab>("news");
+  const [activeTab, setActiveTab] = useState<Tab>("articles");
   const [refreshing, setRefreshing] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [rankingFilter, setRankingFilter] = useState<string | null>(null);
+  const [toolGenreFilter, setToolGenreFilter] = useState<string>(AI_TOOL_GENRES[0].genre);
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [editingSource, setEditingSource] = useState<InfoSource | null>(null);
+  const [sourceCatFilter, setSourceCatFilter] = useState<"all" | "youtube" | "x" | "website">("all");
 
   const {
     data: report,
     isLoading,
     refetch,
   } = trpc.aiInfo.getLatestReport.useQuery(undefined, {
-    staleTime: 0, // Always fetch fresh data on mount
+    staleTime: 0,
     refetchOnMount: true,
-    refetchOnWindowFocus: true, // Refetch when app comes to foreground
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 60 * 1000,
+  });
+
+  const {
+    data: infoSourcesData,
+    refetch: refetchSources,
+  } = trpc.aiInfo.getInfoSources.useQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const addSourceMutation = trpc.aiInfo.addInfoSource.useMutation({
+    onSuccess: () => refetchSources(),
+  });
+
+  const updateMemoMutation = trpc.aiInfo.updateInfoSourceMemo.useMutation({
+    onSuccess: () => refetchSources(),
+  });
+
+  const deleteSourceMutation = trpc.aiInfo.deleteInfoSource.useMutation({
+    onSuccess: () => refetchSources(),
   });
 
   const generateMutation = trpc.aiInfo.generateReport.useMutation({
-    onSuccess: async () => {
-      // Force refetch to get the newly generated data
-      await refetch();
-    },
+    onSuccess: async () => { await refetch(); },
     onSettled: () => setRefreshing(false),
   });
 
-  // Simple refresh: just refetch from DB (no password needed)
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -365,10 +705,7 @@ export default function IdeasScreen() {
     }
   };
 
-  // Admin-only: force regenerate from external sources (requires password)
-  const handlePressGenerate = () => {
-    setShowPasswordModal(true);
-  };
+  const handlePressGenerate = () => setShowPasswordModal(true);
 
   const handlePasswordSuccess = () => {
     setShowPasswordModal(false);
@@ -376,19 +713,35 @@ export default function IdeasScreen() {
     generateMutation.mutate();
   };
 
+  const handleDeleteSource = (id: number) => {
+    Alert.alert("削除確認", "この情報ソースを削除しますか？", [
+      { text: "キャンセル", style: "cancel" },
+      { text: "削除", style: "destructive", onPress: () => deleteSourceMutation.mutate({ id }) },
+    ]);
+  };
+
   const tabs: { key: Tab; label: string; emoji: string }[] = [
-    { key: "news", label: "最新ニュース", emoji: "📰" },
+    { key: "articles", label: "最新記事", emoji: "📰" },
+    { key: "news", label: "最新ニュース", emoji: "📡" },
     { key: "rankings", label: "ツール比較", emoji: "🏆" },
-    { key: "video", label: "動画AI", emoji: "🎬" },
+    { key: "tools", label: "ツール一覧", emoji: "🛠️" },
+    { key: "sources", label: "情報ソース", emoji: "📚" },
   ];
 
   const latestNews: NewsItem[] = (report?.latestNews as NewsItem[]) ?? [];
+  const ledgeNews: LedgeNewsItem[] = (report?.ledgeNews as LedgeNewsItem[]) ?? [];
   const toolRankings: RankingCategory[] = (report?.toolRankings as RankingCategory[]) ?? [];
-  const videoAiTools: VideoTool[] = (report?.videoAiTools as VideoTool[]) ?? [];
   const rankingCategories = toolRankings.map((r) => r.category);
   const filteredRankings = rankingFilter
     ? toolRankings.filter((r) => r.category === rankingFilter)
     : toolRankings;
+
+  const infoSources: InfoSource[] = (infoSourcesData as InfoSource[]) ?? [];
+  const filteredSources = sourceCatFilter === "all"
+    ? infoSources
+    : infoSources.filter((s) => s.category === sourceCatFilter);
+
+  const currentGenre = AI_TOOL_GENRES.find((g) => g.genre === toolGenreFilter) ?? AI_TOOL_GENRES[0];
 
   const reportDateStr = report?.reportDate
     ? typeof report.reportDate === "string"
@@ -399,20 +752,11 @@ export default function IdeasScreen() {
   return (
     <ScreenContainer>
       {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.background, borderBottomColor: colors.border },
-        ]}
-      >
+      <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            AIツールまとめ
-          </Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>AIツールまとめ</Text>
           {reportDateStr ? (
-            <Text style={[styles.headerSub, { color: colors.muted }]}>
-              最終更新: {reportDateStr}
-            </Text>
+            <Text style={[styles.headerSub, { color: colors.muted }]}>最終更新: {reportDateStr}</Text>
           ) : (
             <Text style={[styles.headerSub, { color: colors.muted }]}>毎朝7時に自動更新</Text>
           )}
@@ -430,52 +774,42 @@ export default function IdeasScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tab Bar */}
-      <View
-        style={[
-          styles.tabBar,
-          { backgroundColor: colors.background, borderBottomColor: colors.border },
-        ]}
+      {/* Tab Bar - horizontal scroll */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.tabBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
+        contentContainerStyle={styles.tabBarContent}
       >
         {tabs.map((t) => (
           <TouchableOpacity
             key={t.key}
             style={[
               styles.tabItem,
-              activeTab === t.key && {
-                borderBottomColor: colors.primary,
-                borderBottomWidth: 2,
-              },
+              activeTab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
             ]}
             onPress={() => setActiveTab(t.key)}
           >
-            <Text
-              style={[
-                styles.tabText,
-                { color: activeTab === t.key ? colors.primary : colors.muted },
-              ]}
-            >
+            <Text style={[styles.tabText, { color: activeTab === t.key ? colors.primary : colors.muted }]}>
               {t.emoji} {t.label}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Content */}
-      {isLoading ? (
+      {isLoading && (activeTab === "articles" || activeTab === "news" || activeTab === "rankings") ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.muted }]}>読み込み中...</Text>
         </View>
-      ) : !report ? (
+      ) : !report && (activeTab === "articles" || activeTab === "news" || activeTab === "rankings") ? (
         <View style={styles.center}>
           <Text style={styles.emptyEmoji}>🤖</Text>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            まだデータがありません
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>まだデータがありません</Text>
+          <Text style={[styles.emptyBody, { color: colors.muted }]}>
+            「今すぐ生成する」を押すと、AIツールの最新情報を収集します。{"\n"}毎朝7時に自動更新されます。
           </Text>
-            <Text style={[styles.emptyBody, { color: colors.muted }]}>
-              「今すぐ生成する」を押すと、AIツールの最新情報を収集します。{"\n"}毎朝7時に自動更新されます。
-            </Text>
           <TouchableOpacity
             style={[styles.generateBtn, { backgroundColor: colors.primary }]}
             onPress={handlePressGenerate}
@@ -492,56 +826,58 @@ export default function IdeasScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
         >
-          {activeTab === "news" && (
+          {/* ── 最新記事 (ai-gallery.jp) ── */}
+          {activeTab === "articles" && (
             <>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                AI最新ニュース
-              </Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>最新記事</Text>
               <Text style={[styles.sectionDesc, { color: colors.muted }]}>
-                ChatGPT・Gemini・Claude・動画AIなど最新動向
+                AI Gallery（ai-gallery.jp）の最新AIツール記事
               </Text>
               {latestNews.length === 0 ? (
-                <Text
-                  style={[
-                    styles.emptyBody,
-                    { color: colors.muted, textAlign: "center", marginTop: 24 },
-                  ]}
-                >
-                  ニュースデータがありません
+                <Text style={[styles.emptyBody, { color: colors.muted, textAlign: "center", marginTop: 24 }]}>
+                  記事データがありません
                 </Text>
               ) : (
-                latestNews.map((item, i) => <NewsCard key={i} item={item} />)
+                latestNews.map((item, i) => <ArticleCard key={i} item={item} />)
               )}
             </>
           )}
 
+          {/* ── 最新ニュース (ledge.ai) ── */}
+          {activeTab === "news" && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>最新ニュース</Text>
+              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+                Ledge.ai（ledge.ai）の最新AIニュース
+              </Text>
+              {ledgeNews.length === 0 ? (
+                <View style={styles.center}>
+                  <Text style={[styles.emptyBody, { color: colors.muted, textAlign: "center", marginTop: 24 }]}>
+                    ニュースデータがありません{"\n"}更新ボタンを押してください
+                  </Text>
+                </View>
+              ) : (
+                ledgeNews.map((item, i) => <LedgeNewsCard key={i} item={item} />)
+              )}
+            </>
+          )}
+
+          {/* ── ツール比較 (Artificial Analysis) ── */}
           {activeTab === "rankings" && (
             <>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            AIモデル性能比較
-          </Text>
-          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
-            Artificial Analysis調べ｜知能指数・GDPval・速度・価格など全カテゴリ比較
-          </Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>AIモデル性能比較</Text>
+              <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+                Artificial Analysis調べ｜知能指数・GDPval・速度・価格など全カテゴリ比較
+              </Text>
               {toolRankings.length === 0 ? (
-                <Text
-                  style={[
-                    styles.emptyBody,
-                    { color: colors.muted, textAlign: "center", marginTop: 24 },
-                  ]}
-                >
+                <Text style={[styles.emptyBody, { color: colors.muted, textAlign: "center", marginTop: 24 }]}>
                   ランキングデータがありません
                 </Text>
               ) : (
                 <>
-                  {/* Category filter chips */}
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -550,10 +886,7 @@ export default function IdeasScreen() {
                   >
                     <TouchableOpacity
                       onPress={() => setRankingFilter(null)}
-                      style={[
-                        styles.filterChip,
-                        { backgroundColor: !rankingFilter ? colors.primary : colors.surface, borderColor: !rankingFilter ? colors.primary : colors.border },
-                      ]}
+                      style={[styles.filterChip, { backgroundColor: !rankingFilter ? colors.primary : colors.surface, borderColor: !rankingFilter ? colors.primary : colors.border }]}
                     >
                       <Text style={[styles.filterChipText, { color: !rankingFilter ? "#fff" : colors.muted }]}>すべて</Text>
                     </TouchableOpacity>
@@ -561,10 +894,7 @@ export default function IdeasScreen() {
                       <TouchableOpacity
                         key={cat}
                         onPress={() => setRankingFilter(rankingFilter === cat ? null : cat)}
-                        style={[
-                          styles.filterChip,
-                          { backgroundColor: rankingFilter === cat ? colors.primary : colors.surface, borderColor: rankingFilter === cat ? colors.primary : colors.border },
-                        ]}
+                        style={[styles.filterChip, { backgroundColor: rankingFilter === cat ? colors.primary : colors.surface, borderColor: rankingFilter === cat ? colors.primary : colors.border }]}
                       >
                         <Text style={[styles.filterChipText, { color: rankingFilter === cat ? "#fff" : colors.muted }]}>{cat}</Text>
                       </TouchableOpacity>
@@ -576,35 +906,115 @@ export default function IdeasScreen() {
             </>
           )}
 
-          {activeTab === "video" && (
+          {/* ── AIツール一覧 ── */}
+          {activeTab === "tools" && (
             <>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                動画制作AIツール活用事例
-              </Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>AIツール一覧</Text>
               <Text style={[styles.sectionDesc, { color: colors.muted }]}>
-                Kling・DomoAI・Veo3・Runwayなど動画編集に使えるAIツールの最新情報
+                ジャンル別に市場の主要AIツールをまとめました。タップで公式サイトへ
               </Text>
-              {videoAiTools.length === 0 ? (
-                <Text
-                  style={[
-                    styles.emptyBody,
-                    { color: colors.muted, textAlign: "center", marginTop: 24 },
-                  ]}
+              {/* Genre filter chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 12 }}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {AI_TOOL_GENRES.map((g) => (
+                  <TouchableOpacity
+                    key={g.genre}
+                    onPress={() => setToolGenreFilter(g.genre)}
+                    style={[styles.filterChip, { backgroundColor: toolGenreFilter === g.genre ? colors.primary : colors.surface, borderColor: toolGenreFilter === g.genre ? colors.primary : colors.border }]}
+                  >
+                    <Text style={[styles.filterChipText, { color: toolGenreFilter === g.genre ? "#fff" : colors.muted }]}>
+                      {g.emoji} {g.genre}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              {/* Tool cards */}
+              {currentGenre.tools.map((tool) => (
+                <AiToolCard key={tool.name} tool={tool} />
+              ))}
+            </>
+          )}
+
+          {/* ── 情報ソース ── */}
+          {activeTab === "sources" && (
+            <>
+              <View style={styles.sourcesHeader}>
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>情報ソース</Text>
+                  <Text style={[styles.sectionDesc, { color: colors.muted, marginBottom: 0 }]}>
+                    AI情報を発信しているチャンネル・サイト一覧
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.addSourceBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowAddSourceModal(true)}
                 >
-                  動画AIツールデータがありません
+                  <Text style={styles.addSourceBtnText}>＋ 追加</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Category filter */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 12 }}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {([
+                  { key: "all", label: "すべて" },
+                  { key: "youtube", label: "▶️ YouTube" },
+                  { key: "x", label: "𝕏 X" },
+                  { key: "website", label: "🌐 ウェブ" },
+                ] as { key: typeof sourceCatFilter; label: string }[]).map((c) => (
+                  <TouchableOpacity
+                    key={c.key}
+                    onPress={() => setSourceCatFilter(c.key)}
+                    style={[styles.filterChip, { backgroundColor: sourceCatFilter === c.key ? colors.primary : colors.surface, borderColor: sourceCatFilter === c.key ? colors.primary : colors.border }]}
+                  >
+                    <Text style={[styles.filterChipText, { color: sourceCatFilter === c.key ? "#fff" : colors.muted }]}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {filteredSources.length === 0 ? (
+                <Text style={[styles.emptyBody, { color: colors.muted, textAlign: "center", marginTop: 24 }]}>
+                  情報ソースがありません{"\n"}「＋ 追加」ボタンで追加できます
                 </Text>
               ) : (
-                videoAiTools.map((tool, i) => <VideoToolCard key={i} tool={tool} />)
+                filteredSources.map((source) => (
+                  <InfoSourceCard
+                    key={source.id}
+                    source={source}
+                    onEditMemo={(s) => { setEditingSource(s); }}
+                    onDelete={handleDeleteSource}
+                  />
+                ))
               )}
             </>
           )}
         </ScrollView>
       )}
-      {/* Admin Password Modal */}
+
+      {/* Modals */}
       <AdminPasswordModal
         visible={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
         onSuccess={handlePasswordSuccess}
+      />
+      <AddSourceModal
+        visible={showAddSourceModal}
+        onClose={() => setShowAddSourceModal(false)}
+        onAdd={(data) => addSourceMutation.mutate(data)}
+      />
+      <EditMemoModal
+        visible={!!editingSource}
+        source={editingSource}
+        onClose={() => setEditingSource(null)}
+        onSave={(id, memo) => updateMemoMutation.mutate({ id, memo })}
       />
     </ScreenContainer>
   );
@@ -642,20 +1052,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   tabBar: {
-    flexDirection: "row",
     borderBottomWidth: 0.5,
+    flexGrow: 0,
+  },
+  tabBarContent: {
+    paddingHorizontal: 4,
   },
   tabItem: {
-    flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
-  },
+    whiteSpace: "nowrap",
+  } as never,
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
@@ -766,23 +1180,129 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  useCaseList: {
-    marginTop: 8,
-    gap: 3,
+  toolScore: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "500",
   },
-  useCaseItem: {
+  // AI Tool List
+  toolCard: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 0.5,
+  },
+  toolCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  toolCardName: {
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: 8,
+  },
+  toolCardDesc: {
     fontSize: 12,
     lineHeight: 18,
+    marginBottom: 6,
   },
-  tipBox: {
-    marginTop: 10,
-    padding: 10,
+  toolCardLink: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  // Info Sources
+  sourcesHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  addSourceBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  addSourceBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  sourceCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 8,
+  },
+  sourceEmoji: {
+    fontSize: 20,
+    marginTop: 2,
+  },
+  sourceTitleWrap: {
+    flex: 1,
+  },
+  sourceTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+    marginBottom: 2,
+  },
+  sourceUrl: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  deleteBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  deleteBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  memoBox: {
     borderRadius: 8,
-    borderLeftWidth: 3,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 0.5,
   },
-  tipText: {
+  memoText: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  memoEditBtn: {
+    paddingVertical: 6,
+    borderTopWidth: 0.5,
+    alignItems: "center",
+  },
+  memoEditBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  // Modal
+  catSelector: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  catChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  catChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  memoInput: {
+    height: 80,
+    textAlignVertical: "top",
+    paddingTop: 10,
   },
   center: {
     flex: 1,
@@ -821,7 +1341,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 15,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -900,11 +1419,23 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 11,
-    marginLeft: "auto",
   },
-  toolScore: {
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: "500",
+  useCaseList: {
+    marginTop: 8,
+    gap: 3,
+  },
+  useCaseItem: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  tipBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+  },
+  tipText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
 });
