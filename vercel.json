@@ -1,16 +1,16 @@
 {
   "version": 2,
   "buildCommand": "pnpm build:web && pnpm build:server",
-  "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "dist/**"
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/api/index.js"
+      "source": "/(.*)",
+      "destination": "/api/index.js"
     }
   ]
 }

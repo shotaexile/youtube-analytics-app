@@ -36,6 +36,7 @@ module.exports = __toCommonJS(handler_exports);
 var import_config = require("dotenv/config");
 var import_express = __toESM(require("express"));
 var import_path = __toESM(require("path"));
+var import_fs = __toESM(require("fs"));
 var import_express2 = require("@trpc/server/adapters/express");
 
 // shared/const.ts
@@ -2413,11 +2414,67 @@ app.use(
     createContext
   })
 );
-var distPath = import_path.default.join(__dirname, "../dist");
+var distCandidates = [
+  import_path.default.join(process.cwd(), "dist"),
+  import_path.default.join(__dirname, "../dist"),
+  import_path.default.join(__dirname, "dist")
+];
+var distPath = distCandidates[0];
+for (const candidate of distCandidates) {
+  try {
+    if (import_fs.default.existsSync(import_path.default.join(candidate, "index.html"))) {
+      distPath = candidate;
+      break;
+    }
+  } catch {
+  }
+}
+app.get("/api/debug-paths", (_req, res) => {
+  const results = {
+    cwd: process.cwd(),
+    dirname: __dirname,
+    distPath,
+    candidates: distCandidates.map((c) => ({
+      path: c,
+      exists: false,
+      hasIndex: false
+    }))
+  };
+  for (let i = 0; i < distCandidates.length; i++) {
+    try {
+      results.candidates[i].exists = import_fs.default.existsSync(distCandidates[i]);
+      results.candidates[i].hasIndex = import_fs.default.existsSync(
+        import_path.default.join(distCandidates[i], "index.html")
+      );
+    } catch {
+    }
+  }
+  try {
+    const cwdFiles = import_fs.default.readdirSync(process.cwd()).slice(0, 30);
+    results.cwdFiles = cwdFiles;
+  } catch (e) {
+    results.cwdFiles = "error: " + e.message;
+  }
+  try {
+    if (import_fs.default.existsSync(distPath)) {
+      results.distFiles = import_fs.default.readdirSync(distPath).slice(0, 30);
+    }
+  } catch (e) {
+    results.distFiles = "error: " + e.message;
+  }
+  res.json(results);
+});
 app.use(import_express.default.static(distPath));
 app.get("*", (req, res) => {
   if (!req.path.startsWith("/api/")) {
-    res.sendFile(import_path.default.join(distPath, "index.html"));
+    const indexPath = import_path.default.join(distPath, "index.html");
+    if (import_fs.default.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send(
+        `<!DOCTYPE html><html><body><h1>Static files not found</h1><p>distPath: ${distPath}</p><p>cwd: ${process.cwd()}</p><p>dirname: ${__dirname}</p><p>Check <a href="/api/debug-paths">/api/debug-paths</a> for details</p></body></html>`
+      );
+    }
   } else {
     res.status(404).json({ error: "Not Found" });
   }
