@@ -131,8 +131,8 @@ function CustomTabBar(props: any) {
           const label = options.title ?? route.name;
           const isFocused = props.state.index === index;
 
-          // Skip hidden tabs (href: null)
-          if (options.href === null) return null;
+          // Skip hidden tabs (title not set = hidden)
+          if (!options.title) return null;
 
           const onPress = () => {
             const event = props.navigation.emit({
