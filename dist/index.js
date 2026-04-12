@@ -13,7 +13,7 @@ var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 
 // server/db.ts
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // drizzle/schema.ts
@@ -120,7 +120,19 @@ var aiDailyReport = mysqlTable("ai_daily_report", {
   toolRankings: text("toolRankings"),
   // JSON string: { toolName, category, useCases, tips }[]
   videoAiTools: text("videoAiTools"),
+  // JSON string: { title, url, publishedAt }[] from ledge.ai
+  ledgeNews: text("ledgeNews"),
   generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+});
+var infoSources = mysqlTable("info_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  category: mysqlEnum("category", ["youtube", "x", "website"]).notNull().default("website"),
+  title: varchar("title", { length: 255 }).notNull(),
+  url: varchar("url", { length: 512 }).notNull(),
+  memo: text("memo"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 
@@ -212,17 +224,72 @@ async function getLatestAiDailyReport() {
   const rows = await db.select().from(aiDailyReport).orderBy(desc(aiDailyReport.reportDate)).limit(1);
   return rows[0] ?? null;
 }
+async function getInfoSources() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(infoSources).orderBy(asc(infoSources.category), asc(infoSources.sortOrder), asc(infoSources.id));
+}
+async function addInfoSource(data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(infoSources).values({
+    category: data.category,
+    title: data.title,
+    url: data.url,
+    memo: data.memo ?? null,
+    sortOrder: 999
+  });
+  return result;
+}
+async function updateInfoSourceMemo(id, memo) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(infoSources).set({ memo }).where(eq(infoSources.id, id));
+}
+async function deleteInfoSource(id) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(infoSources).where(eq(infoSources.id, id));
+}
+async function seedDefaultInfoSources() {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select({ id: infoSources.id }).from(infoSources).limit(1);
+  if (existing.length > 0) return;
+  const defaults = [
+    // YouTube
+    { category: "youtube", title: "KEITO\u3010AI&WEB ch\u3011", url: "https://www.youtube.com/@keitoaiweb", sortOrder: 1 },
+    { category: "youtube", title: "\u52D5\u753B\u7DE8\u96C6\u306E\u4E2D\u306E\u4EBA", url: "https://www.youtube.com/@%E5%8B%95%E7%94%BB%E7%B7%A8%E9%9B%86%E3%81%AE%E4%B8%AD%E3%81%AE%E4%BA%BA", sortOrder: 2 },
+    { category: "youtube", title: "AI\u69D8\u306E\u4E0B\u50D5", url: "https://www.youtube.com/@AI-geboku", sortOrder: 3 },
+    { category: "youtube", title: "AI\u5927\u5B66\u3010AI&ChatGPT\u6700\u65B0\u60C5\u5831\u3011", url: "https://www.youtube.com/@AIAIChatGPT-cj4sh/videos", sortOrder: 4 },
+    { category: "youtube", title: "\u30C1\u30E3\u30A8\u30F3\u3010AI\u7814\u7A76\u6240\u3011\uFF5E\u4ED5\u4E8B\u3067\u4F7F\u3048\u308B\u6700\u65B0\u306EAI\u60C5\u5831\u3092\u767A\u4FE1\uFF5E By\u30C7\u30B8\u30E9\u30A4\u30BA", url: "https://www.youtube.com/@chaen-ai-lab", sortOrder: 5 },
+    { category: "youtube", title: "\u3044\u3051\u3068\u3082ch", url: "https://www.youtube.com/@iketomo-ch/videos", sortOrder: 6 },
+    // X
+    { category: "x", title: "Ledge.ai | AI\u30C8\u30EC\u30F3\u30C9\u306E\u9271\u8106", url: "https://x.com/ledgeai?s=20", sortOrder: 1 },
+    { category: "x", title: "AI\u69D8\u306E\u4E0B\u50D5", url: "https://x.com/aigeboku?s=20", sortOrder: 2 },
+    // Website
+    { category: "website", title: "There's An AI For That (TAAFT)", url: "https://theresanaiforthat.com/", sortOrder: 1 },
+    { category: "website", title: "Artificial Analysis", url: "https://artificialanalysis.ai/#media-leaderboards", sortOrder: 2 },
+    { category: "website", title: "AIsmiley", url: "https://aismiley.co.jp/", sortOrder: 3 },
+    { category: "website", title: "Ladge.ai", url: "https://ledge.ai/", sortOrder: 4 }
+  ];
+  await db.insert(infoSources).values(defaults);
+}
 async function upsertAiDailyReport(data) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(aiDailyReport).values(data).onDuplicateKeyUpdate({
-    set: {
+  const dateStr = data.reportDate instanceof Date ? data.reportDate.toISOString().split("T")[0] : String(data.reportDate);
+  const existing = await db.select({ id: aiDailyReport.id }).from(aiDailyReport).where(eq(aiDailyReport.reportDate, dateStr)).limit(1);
+  if (existing.length > 0) {
+    await db.update(aiDailyReport).set({
       latestNews: data.latestNews,
       toolRankings: data.toolRankings,
       videoAiTools: data.videoAiTools,
       generatedAt: /* @__PURE__ */ new Date()
-    }
-  });
+    }).where(eq(aiDailyReport.id, existing[0].id));
+  } else {
+    await db.insert(aiDailyReport).values(data);
+  }
 }
 
 // server/_core/cookies.ts
@@ -856,7 +923,7 @@ function formatRelativeTime(isoDate) {
 }
 
 // server/analytics-router.ts
-import { eq as eq2, desc as desc2, asc, and } from "drizzle-orm";
+import { eq as eq2, desc as desc2, asc as asc2, and } from "drizzle-orm";
 import * as crypto from "crypto";
 async function sendExpoPushNotifications(tokens, title, body) {
   if (tokens.length === 0) return;
@@ -1137,7 +1204,7 @@ var analyticsRouter = router({
       impressions: videos.impressions
     };
     const col = colMap[sortBy] || videos.publishedDate;
-    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? asc(col) : desc2(col));
+    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? asc2(col) : desc2(col));
     return baseQuery.limit(limit).offset(offset);
   }),
   // Get monthly stats
@@ -1269,7 +1336,7 @@ var analyticsRouter = router({
     if (!db) throw new Error("Database not available");
     const allVideos = await db.select().from(videos).orderBy(desc2(videos.publishedDate));
     if (allVideos.length === 0) throw new Error("\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002CSV\u3092\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    const allMonthly = await db.select().from(monthlyStats).orderBy(asc(monthlyStats.month));
+    const allMonthly = await db.select().from(monthlyStats).orderBy(asc2(monthlyStats.month));
     const channelRows = await db.select().from(channelConfig).limit(1);
     const channel = channelRows[0];
     const totalVideos = allVideos.length;
@@ -1462,7 +1529,7 @@ ${trendContext}
   getEarlyStats: publicProcedure.input(z2.object({ videoId: z2.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
-    const rows = await db.select().from(videoEarlyStats).where(eq2(videoEarlyStats.videoId, input.videoId)).orderBy(asc(videoEarlyStats.timeWindow));
+    const rows = await db.select().from(videoEarlyStats).where(eq2(videoEarlyStats.videoId, input.videoId)).orderBy(asc2(videoEarlyStats.timeWindow));
     return rows;
   }),
   // 全動画の初速データ一覧（ランキング用）
@@ -1720,30 +1787,6 @@ async function fetchAiGalleryNews() {
     return true;
   }).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 15);
 }
-function parseAaDataBlock(html, fieldName) {
-  const pattern = new RegExp(
-    `"data":\\[([^\\[\\]]*"${fieldName}"[^\\[\\]]*)\\]`,
-    "g"
-  );
-  const match = pattern.exec(html);
-  if (!match) return [];
-  const items = [];
-  const itemPattern = /\{"modelName":"([^"]+)"([^}]*)\}/g;
-  let m;
-  while ((m = itemPattern.exec(match[1])) !== null) {
-    const name = m[1];
-    const rest = m[2];
-    const item = { modelName: name };
-    const urlMatch = /"detailsUrl":"([^"]+)"/.exec(rest);
-    if (urlMatch) item.detailsUrl = urlMatch[1];
-    const fieldMatch = new RegExp(`"${fieldName}":([\\.\\d]+)`).exec(rest);
-    if (fieldMatch) {
-      item[fieldName] = parseFloat(fieldMatch[1]);
-    }
-    items.push(item);
-  }
-  return items;
-}
 async function fetchAaMediaRankings(mediaType) {
   const pageUrl = mediaType === "image" ? "https://artificialanalysis.ai/text-to-image" : "https://artificialanalysis.ai/video";
   let html = "";
@@ -1813,23 +1856,72 @@ async function fetchAaMediaRankings(mediaType) {
     };
   });
 }
-async function fetchArtificialAnalysisRankings() {
+async function fetchAaAllModels() {
   let html = "";
   try {
     const res = await fetch("https://artificialanalysis.ai/", {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; ViewCore/1.0)" }
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     });
     if (res.ok) html = await res.text();
   } catch {
-    html = "";
+    return [];
   }
-  if (!html) {
-    return generateFallbackRankings();
+  if (!html || html.length < 1e5) return [];
+  const scriptMatches = [...html.matchAll(/<script[^>]*>(self\.__next_f\.push\(.*?\))<\/script>/gs)];
+  let targetScript = "";
+  for (const match of scriptMatches) {
+    if (match[1].includes("safeGdpval") && match[1].length > 5e4) {
+      targetScript = match[1];
+      break;
+    }
   }
+  if (!targetScript) return [];
+  const idPositions = [];
+  const idPattern = /\{\\"id\\":\\"[0-9a-f-]{36}\\"/g;
+  let m;
+  while ((m = idPattern.exec(targetScript)) !== null) {
+    idPositions.push(m.index);
+  }
+  if (idPositions.length === 0) return [];
+  const models = [];
   const baseUrl = "https://artificialanalysis.ai";
-  const intelligenceModels = parseAaDataBlock(html, "intelligenceIndex").sort((a, b) => (b.intelligenceIndex ?? 0) - (a.intelligenceIndex ?? 0)).slice(0, 5);
-  const speedModels = parseAaDataBlock(html, "medianOutputSpeed").sort((a, b) => (b.medianOutputSpeed ?? 0) - (a.medianOutputSpeed ?? 0)).slice(0, 5);
-  const priceModels = parseAaDataBlock(html, "pricePerMillionTokens").sort((a, b) => (a.pricePerMillionTokens ?? 999) - (b.pricePerMillionTokens ?? 999)).slice(0, 5);
+  for (let i = 0; i < idPositions.length; i++) {
+    const start = idPositions[i];
+    const end = i + 1 < idPositions.length ? idPositions[i + 1] : start + 5e3;
+    const entry = targetScript.substring(start, end);
+    const nameMatch = /\\"short_name\\":\\"([^\\"]+)\\"/.exec(entry);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+    const urlMatch = /\\"model_url\\":\\"([^\\"]+)\\"/.exec(entry);
+    const modelUrl = urlMatch ? urlMatch[1] : null;
+    const extract = (pattern) => {
+      const m2 = pattern.exec(entry);
+      return m2 ? parseFloat(m2[1]) : void 0;
+    };
+    const intelligence = extract(/\\"intelligence_index\\":([-\d.]+)/);
+    const speed = extract(/\\"median_output_speed\\":([-\d.]+)/);
+    const price = extract(/\\"price_1m_blended_3_to_1\\":([-\d.]+)/);
+    const omniscience = extract(/\\"omniscience\\":([-\d.]+)/);
+    const gdpval = extract(/\\"safeGdpval\\":\{\\"elo\\":([-\d.]+)/);
+    const openness = extract(/\\"opennessIndex\\":([-\d.]+)/);
+    const coding = extract(/\\"coding_index\\":([-\d.]+)/);
+    const agentic = extract(/\\"agentic_index\\":([-\d.]+)/);
+    models.push({
+      name,
+      url: modelUrl ? `${baseUrl}${modelUrl}` : baseUrl,
+      intelligence,
+      speed,
+      price,
+      omniscience,
+      gdpval,
+      openness,
+      coding,
+      agentic
+    });
+  }
+  return models;
+}
+async function fetchArtificialAnalysisRankings() {
   const modelDescriptions = {
     "Gemini": { desc: "Google\u306E\u6700\u65B0\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EBLLM", bestFor: "\u8907\u96D1\u306A\u63A8\u8AD6\u30FB\u30B3\u30FC\u30C9\u751F\u6210" },
     "GPT": { desc: "OpenAI\u306E\u6700\u65B0GPT\u30E2\u30C7\u30EB", bestFor: "\u6C4E\u7528\u30BF\u30B9\u30AF\u30FB\u6587\u7AE0\u751F\u6210" },
@@ -1841,7 +1933,16 @@ async function fetchArtificialAnalysisRankings() {
     "NVIDIA": { desc: "NVIDIA\u88FD\u306E\u9AD8\u901F\u63A8\u8AD6LLM", bestFor: "\u30A8\u30F3\u30BF\u30FC\u30D7\u30E9\u30A4\u30BA\u5411\u3051" },
     "GLM": { desc: "\u6E05\u83EF\u5927\u5B66\u767A\u306E\u4E2D\u56FD\u8A9E\u5BFE\u5FDCLLM", bestFor: "\u4E2D\u56FD\u8A9E\u51E6\u7406\u30FB\u591A\u8A00\u8A9E\u5BFE\u5FDC" },
     "Muse": { desc: "\u65B0\u4E16\u4EE3\u30AF\u30EA\u30A8\u30A4\u30C6\u30A3\u30D6LLM", bestFor: "\u5275\u4F5C\u30FB\u30A2\u30A4\u30C7\u30A2\u751F\u6210" },
-    "gpt-oss": { desc: "OpenAI\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u7CFB\u30E2\u30C7\u30EB", bestFor: "\u9AD8\u901F\u51E6\u7406\u30FB\u4F4E\u30B3\u30B9\u30C8" }
+    "gpt-oss": { desc: "OpenAI\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u7CFB\u30E2\u30C7\u30EB", bestFor: "\u9AD8\u901F\u51E6\u7406\u30FB\u4F4E\u30B3\u30B9\u30C8" },
+    "MiniMax": { desc: "MiniMax\u306E\u9AD8\u6027\u80FD\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EBLLM", bestFor: "\u30DE\u30EB\u30C1\u30E2\u30FC\u30C0\u30EB\u30FB\u9577\u6587\u51E6\u7406" },
+    "Qwen": { desc: "Alibaba\u306E\u591A\u8A00\u8A9E\u5BFE\u5FDCLLM", bestFor: "\u591A\u8A00\u8A9E\u51E6\u7406\u30FB\u30B3\u30FC\u30C9\u751F\u6210" },
+    "Kimi": { desc: "Moonshot AI\u306E\u9577\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8LLM", bestFor: "\u8D85\u9577\u6587\u51E6\u7406\u30FB\u6587\u66F8\u5206\u6790" },
+    "K2": { desc: "MBZUAI\u767A\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9LLM", bestFor: "\u7814\u7A76\u30FB\u30AA\u30FC\u30D7\u30F3\u5229\u7528" },
+    "Nemotron": { desc: "NVIDIA\u88FD\u306E\u9AD8\u6027\u80FD\u63A8\u8AD6LLM", bestFor: "\u30A8\u30F3\u30BF\u30FC\u30D7\u30E9\u30A4\u30BA\u30FB\u9AD8\u901F\u51E6\u7406" },
+    "MiMo": { desc: "Xiaomi\u767A\u306E\u8EFD\u91CF\u9AD8\u6027\u80FDLLM", bestFor: "\u30E2\u30D0\u30A4\u30EB\u30FB\u30A8\u30C3\u30B8\u63A8\u8AD6" },
+    "Gemma": { desc: "Google\u306E\u30AA\u30FC\u30D7\u30F3\u30BD\u30FC\u30B9\u8EFD\u91CFLLM", bestFor: "\u30ED\u30FC\u30AB\u30EB\u5B9F\u884C\u30FB\u7814\u7A76" },
+    "Solar": { desc: "Upstage\u767A\u306E\u9AD8\u6027\u80FDLLM", bestFor: "\u4F01\u696D\u5411\u3051\u30FB\u6587\u66F8\u51E6\u7406" },
+    "EXAONE": { desc: "LG AI Research\u767A\u306ELLM", bestFor: "\u97D3\u56FD\u8A9E\u30FB\u591A\u8A00\u8A9E\u51E6\u7406" }
   };
   function getModelInfo(name) {
     for (const [key, info] of Object.entries(modelDescriptions)) {
@@ -1849,42 +1950,83 @@ async function fetchArtificialAnalysisRankings() {
     }
     return { desc: "\u9AD8\u6027\u80FDAI\u30E2\u30C7\u30EB", bestFor: "\u6C4E\u7528\u30BF\u30B9\u30AF" };
   }
-  const toToolList = (models, scoreField, scoreLabel, scoreUnit) => models.map((m, i) => {
-    const info = getModelInfo(m.modelName);
+  const toToolList = (models, scoreField, scoreLabel, scoreUnit, ascending = false, decimalPlaces = 1) => models.map((m, i) => {
+    const info = getModelInfo(m.name);
     const scoreVal = m[scoreField];
-    const scoreStr = scoreVal !== void 0 ? `${scoreLabel}: ${scoreVal.toFixed(scoreField === "pricePerMillionTokens" ? 4 : 1)}${scoreUnit}` : void 0;
+    const scoreStr = scoreVal !== void 0 ? `${scoreLabel}: ${scoreVal.toFixed(decimalPlaces)}${scoreUnit}` : void 0;
     return {
       rank: i + 1,
-      toolName: m.modelName,
+      toolName: m.name,
       description: info.desc,
       bestFor: info.bestFor,
-      url: m.detailsUrl ? `${baseUrl}${m.detailsUrl}` : baseUrl,
+      url: m.url,
       score: scoreStr
     };
   });
   const rankings = [];
-  if (intelligenceModels.length > 0) {
-    rankings.push({
-      category: "\u{1F9E0} LLM\u77E5\u6027\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08Intelligence Index\uFF09",
-      tools: toToolList(intelligenceModels, "intelligenceIndex", "\u77E5\u6027\u6307\u6570", "")
-    });
-  }
-  if (speedModels.length > 0) {
-    rankings.push({
-      category: "\u26A1 LLM\u30B9\u30D4\u30FC\u30C9\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08Output Speed\uFF09",
-      tools: toToolList(speedModels, "medianOutputSpeed", "\u901F\u5EA6", " tok/s")
-    });
-  }
-  if (priceModels.length > 0) {
-    rankings.push({
-      category: "\u{1F4B0} LLM\u30B3\u30B9\u30D1\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08Price/M tokens\uFF09",
-      tools: toToolList(priceModels, "pricePerMillionTokens", "\u4FA1\u683C", "$/M")
-    });
-  }
-  const [imageModels, videoModels] = await Promise.all([
+  const [allModels, imageModels, videoModels] = await Promise.all([
+    fetchAaAllModels(),
     fetchAaMediaRankings("image"),
     fetchAaMediaRankings("video")
   ]);
+  if (allModels.length > 0) {
+    const intelligenceModels = allModels.filter((m) => m.intelligence !== void 0 && m.intelligence !== null).sort((a, b) => (b.intelligence ?? 0) - (a.intelligence ?? 0)).slice(0, 8);
+    if (intelligenceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F9E0} \u77E5\u80FD\u6307\u6570\uFF08Intelligence Index\uFF09",
+        tools: toToolList(intelligenceModels, "intelligence", "\u77E5\u6027\u6307\u6570", "")
+      });
+    }
+    const omniscienceModels = allModels.filter((m) => m.omniscience !== void 0 && m.omniscience !== null).sort((a, b) => (b.omniscience ?? -999) - (a.omniscience ?? -999)).slice(0, 8);
+    if (omniscienceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F310} AA-\u5168\u77E5\uFF08Omniscience Index\uFF09",
+        tools: toToolList(omniscienceModels, "omniscience", "\u5168\u77E5\u6307\u6570", "")
+      });
+    }
+    const gdpvalModels = allModels.filter((m) => m.gdpval !== void 0 && m.gdpval !== null).sort((a, b) => (b.gdpval ?? 0) - (a.gdpval ?? 0)).slice(0, 8);
+    if (gdpvalModels.length > 0) {
+      rankings.push({
+        category: "\u{1F3C6} GDPval-AA\uFF08\u7D4C\u6E08\u4FA1\u5024\u30B9\u30B3\u30A2\uFF09",
+        tools: toToolList(gdpvalModels, "gdpval", "ELO", "", false, 0)
+      });
+    }
+    const opennessModels = allModels.filter((m) => m.openness !== void 0 && m.openness !== null).sort((a, b) => (b.openness ?? 0) - (a.openness ?? 0)).slice(0, 8);
+    if (opennessModels.length > 0) {
+      rankings.push({
+        category: "\u{1F513} \u958B\u653E\u6027\u6307\u6570\uFF08Openness Index\uFF09",
+        tools: toToolList(opennessModels, "openness", "\u958B\u653E\u6027", "")
+      });
+    }
+    const codingModels = allModels.filter((m) => m.coding !== void 0 && m.coding !== null).sort((a, b) => (b.coding ?? 0) - (a.coding ?? 0)).slice(0, 8);
+    if (codingModels.length > 0) {
+      rankings.push({
+        category: "\u{1F4BB} \u60C5\u5831\u5206\u6790\u30FB\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\u6307\u6570\uFF08Coding Index\uFF09",
+        tools: toToolList(codingModels, "coding", "\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\u6307\u6570", "")
+      });
+    }
+    const agenticModels = allModels.filter((m) => m.agentic !== void 0 && m.agentic !== null).sort((a, b) => (b.agentic ?? 0) - (a.agentic ?? 0)).slice(0, 8);
+    if (agenticModels.length > 0) {
+      rankings.push({
+        category: "\u{1F916} \u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6307\u6570\uFF08Agentic Index\uFF09",
+        tools: toToolList(agenticModels, "agentic", "\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6307\u6570", "")
+      });
+    }
+    const speedModels = allModels.filter((m) => m.speed !== void 0 && m.speed !== null && (m.speed ?? 0) > 0).sort((a, b) => (b.speed ?? 0) - (a.speed ?? 0)).slice(0, 8);
+    if (speedModels.length > 0) {
+      rankings.push({
+        category: "\u26A1 \u901F\u5EA6\u3068\u9045\u5EF6\uFF08Output Speed\uFF09",
+        tools: toToolList(speedModels, "speed", "\u901F\u5EA6", " tok/s", false, 0)
+      });
+    }
+    const priceModels = allModels.filter((m) => m.price !== void 0 && m.price !== null && (m.price ?? 0) > 0).sort((a, b) => (a.price ?? 999) - (b.price ?? 999)).slice(0, 8);
+    if (priceModels.length > 0) {
+      rankings.push({
+        category: "\u{1F4B0} \u4FA1\u683C\u30FB\u30B3\u30B9\u30C8\u52B9\u7387\uFF08Price per 1M tokens\uFF09",
+        tools: toToolList(priceModels, "price", "\u4FA1\u683C", "$/M", true, 4)
+      });
+    }
+  }
   if (imageModels.length > 0) {
     rankings.push({
       category: "\u{1F5BC}\uFE0F \u753B\u50CF\u751F\u6210\u30E9\u30F3\u30AD\u30F3\u30B0\uFF08ELO\u30B9\u30B3\u30A2\uFF09",
@@ -1944,6 +2086,36 @@ async function generateFallbackRankings() {
     return [];
   }
 }
+async function fetchLedgeAiNews() {
+  let html = "";
+  try {
+    const res = await fetch("https://ledge.ai/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    });
+    if (res.ok) html = await res.text();
+  } catch {
+    return [];
+  }
+  if (!html || html.length < 5e4) return [];
+  const thumbnailSuffix = "\u306E\u30B5\u30E0\u30CD\u30A4\u30EB\u753B\u50CF";
+  const patternStr = String.raw`(\d{4})<span>/<\/span>(\d{1,2})<span>/<\/span>(\d{1,2})[\s\S]{0,500}?href="(\/articles\/([^"]+))"[\s\S]{0,500}?alt="([^"]+?)(?:${thumbnailSuffix})?"`;
+  const pattern = new RegExp(patternStr, "g");
+  const articles = [];
+  const seen = /* @__PURE__ */ new Set();
+  let m;
+  while ((m = pattern.exec(html)) !== null) {
+    const [, year, month, day, urlPath, slug, title] = m;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    articles.push({
+      title,
+      url: "https://ledge.ai" + urlPath,
+      publishedAt: year + "-" + month.padStart(2, "0") + "-" + day.padStart(2, "0")
+    });
+    if (articles.length >= 20) break;
+  }
+  return articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+}
 async function generateVideoAiTools(today) {
   const response = await invokeLLM({
     messages: [
@@ -1977,8 +2149,34 @@ var aiInfoRouter = router({
       generatedAt: report.generatedAt,
       latestNews: report.latestNews ? JSON.parse(report.latestNews) : [],
       toolRankings: report.toolRankings ? JSON.parse(report.toolRankings) : [],
-      videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : []
+      videoAiTools: report.videoAiTools ? JSON.parse(report.videoAiTools) : [],
+      ledgeNews: report.ledgeNews ? JSON.parse(report.ledgeNews) : []
     };
+  }),
+  /** Get all info sources */
+  getInfoSources: publicProcedure.query(async () => {
+    await seedDefaultInfoSources();
+    return getInfoSources();
+  }),
+  /** Add a new info source */
+  addInfoSource: publicProcedure.input(z3.object({
+    category: z3.enum(["youtube", "x", "website"]),
+    title: z3.string().min(1).max(255),
+    url: z3.string().url(),
+    memo: z3.string().optional()
+  })).mutation(async ({ input }) => {
+    return addInfoSource(input);
+  }),
+  /** Update memo for an info source */
+  updateInfoSourceMemo: publicProcedure.input(z3.object({
+    id: z3.number(),
+    memo: z3.string()
+  })).mutation(async ({ input }) => {
+    return updateInfoSourceMemo(input.id, input.memo);
+  }),
+  /** Delete an info source */
+  deleteInfoSource: publicProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+    return deleteInfoSource(input.id);
   }),
   /**
    * Verify admin password for generating reports manually.
@@ -1996,16 +2194,18 @@ var aiInfoRouter = router({
    */
   generateReport: publicProcedure.mutation(async () => {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const [latestNews, toolRankings, videoAiTools] = await Promise.all([
+    const [latestNews, toolRankings, videoAiTools, ledgeNews] = await Promise.all([
       fetchAiGalleryNews(),
       fetchArtificialAnalysisRankings(),
-      generateVideoAiTools(today)
+      generateVideoAiTools(today),
+      fetchLedgeAiNews()
     ]);
     await upsertAiDailyReport({
       reportDate: new Date(today),
       latestNews: JSON.stringify(latestNews),
       toolRankings: JSON.stringify(toolRankings),
       videoAiTools: JSON.stringify(videoAiTools),
+      ledgeNews: JSON.stringify(ledgeNews),
       generatedAt: /* @__PURE__ */ new Date()
     });
     return {
@@ -2013,7 +2213,8 @@ var aiInfoRouter = router({
       reportDate: today,
       newsCount: latestNews.length,
       rankingCategories: toolRankings.length,
-      videoToolsCount: videoAiTools.length
+      videoToolsCount: videoAiTools.length,
+      ledgeNewsCount: ledgeNews.length
     };
   })
 });
