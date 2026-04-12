@@ -36,6 +36,7 @@ module.exports = __toCommonJS(handler_exports);
 var import_config = require("dotenv/config");
 var import_express = __toESM(require("express"));
 var import_path = __toESM(require("path"));
+var import_fs = __toESM(require("fs"));
 var import_express2 = require("@trpc/server/adapters/express");
 
 // shared/const.ts
@@ -2406,6 +2407,20 @@ registerOAuthRoutes(app);
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
 });
+app.get("/api/debug-paths", (_req, res) => {
+  const candidates = [
+    import_path.default.join(__dirname, "../dist"),
+    import_path.default.join(__dirname, "../../dist"),
+    import_path.default.join(process.cwd(), "dist"),
+    "/var/task/dist"
+  ];
+  const results = candidates.map((p) => ({
+    path: p,
+    exists: import_fs.default.existsSync(p),
+    hasIndex: import_fs.default.existsSync(import_path.default.join(p, "index.html"))
+  }));
+  res.json({ __dirname, cwd: process.cwd(), candidates: results });
+});
 app.use(
   "/api/trpc",
   (0, import_express2.createExpressMiddleware)({
@@ -2413,7 +2428,23 @@ app.use(
     createContext
   })
 );
-var distDir = import_path.default.join(process.cwd(), "dist");
+function findDistDir() {
+  const candidates = [
+    import_path.default.join(__dirname, "../dist"),
+    import_path.default.join(__dirname, "../../dist"),
+    import_path.default.join(process.cwd(), "dist"),
+    "/var/task/dist"
+  ];
+  for (const p of candidates) {
+    if (import_fs.default.existsSync(import_path.default.join(p, "index.html"))) {
+      console.log("[static] Using dist dir:", p);
+      return p;
+    }
+  }
+  console.warn("[static] Could not find dist dir, tried:", candidates);
+  return candidates[0];
+}
+var distDir = findDistDir();
 app.use(import_express.default.static(distDir));
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) {
@@ -2421,10 +2452,10 @@ app.get("*", (req, res) => {
     return;
   }
   const indexPath = import_path.default.join(distDir, "index.html");
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      res.status(404).send("Not Found");
-    }
-  });
+  if (import_fs.default.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send(`index.html not found. distDir=${distDir}`);
+  }
 });
 var handler_default = app;
