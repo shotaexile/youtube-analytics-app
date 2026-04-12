@@ -1,5 +1,4 @@
-import {
-  View,
+import { View,
   Text,
   FlatList,
   TouchableOpacity,
@@ -10,7 +9,9 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from "react-native";
+import Svg, { Polyline, Circle, Line, Text as SvgText } from "react-native-svg";
 import { Image } from "expo-image";
 import { useState, useCallback, useEffect, useRef, useContext } from "react";
 import { ScreenContainer } from "@/components/screen-container";
@@ -117,7 +118,7 @@ function EarlyStatsInputModal({
         views: s.views > 0 ? String(s.views) : "",
         impressions: s.impressions > 0 ? String(s.impressions) : "",
         ctr: s.ctr > 0 ? String(s.ctr) : "",
-        avgWatchTimeSec: (s.avgWatchTimeSec ?? 0) > 0 ? String(s.avgWatchTimeSec) : "",
+        avgWatchTimeSec: (s.avgWatchTimeSec ?? 0) > 0 ? secToMinSec(s.avgWatchTimeSec) : "",
         likeRate: s.likeRate > 0 ? String(s.likeRate) : "",
       };
     }
@@ -138,7 +139,7 @@ function EarlyStatsInputModal({
         const views = parseInt(form.views) || 0;
         const impressions = parseInt(form.impressions) || 0;
         const ctr = parseFloat(form.ctr) || 0;
-        const avgWatchTimeSec = parseInt(form.avgWatchTimeSec) || 0;
+        const avgWatchTimeSec = parseMinSec(form.avgWatchTimeSec);
         const likeRate = parseFloat(form.likeRate) || 0;
 
         if (views > 0 || impressions > 0) {
@@ -171,6 +172,26 @@ function EarlyStatsInputModal({
       }
     };
   }, []);
+
+// 「分:秒」形式（例: 3:05）を秒数に変換
+function parseMinSec(val: string): number {
+  if (!val.trim()) return 0;
+  if (val.includes(":")) {
+    const parts = val.split(":");
+    const min = parseInt(parts[0]) || 0;
+    const sec = parseInt(parts[1]) || 0;
+    return min * 60 + sec;
+  }
+  return parseInt(val) || 0;
+}
+
+// 秒数を「分:秒」形式に変換
+function secToMinSec(sec: number): string {
+  if (!sec || sec <= 0) return "";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
   const updateField = (window: TimeWindow, field: keyof InputFormState, value: string) => {
     setForms(prev => ({ ...prev, [window]: { ...prev[window], [field]: value } }));
@@ -278,14 +299,14 @@ function EarlyStatsInputModal({
             hint="YouTube Studioに表示されている%の数値をそのまま入力"
           />
           <InputField
-            label="平均視聴時間（秒）"
+            label="平均視聴時間（分:秒）"
             value={currentForm.avgWatchTimeSec}
             onChangeText={v => updateField(activeWindow, "avgWatchTimeSec", v)}
-            placeholder="例: 185"
-            keyboardType="numeric"
+            placeholder="例: 3:05"
+            keyboardType="default"
             icon="clock.fill"
             iconColor="#22C55E"
-            hint="YouTube Studioに表示されている平均視聴時間を秒数で入力（例: 3分5秒 → 185）"
+            hint="YouTube Studioの平均視聴時間を「分:秒」形式で入力（例: 3分5秒 → 3:05）"
             colors={colors}
           />
           <InputField
@@ -321,7 +342,7 @@ function InputField({
   value: string;
   onChangeText: (v: string) => void;
   placeholder: string;
-  keyboardType?: "numeric" | "decimal-pad";
+  keyboardType?: "numeric" | "decimal-pad" | "default";
   icon: any;
   iconColor: string;
   hint?: string;
@@ -482,10 +503,166 @@ function VideoPickerRow({
   );
 }
 
+// ── Growth Chart ─────────────────────────────────────────────────────────────
+
+const CHART_TIME_WINDOWS: TimeWindow[] = ["1h", "24h", "48h", "1week"];
+const CHART_WINDOW_LABELS: Record<TimeWindow, string> = { "1h": "1h", "24h": "24h", "48h": "48h", "1week": "1w" };
+
+interface GrowthChartItem {
+  videoId: string;
+  title: string | null;
+  isShort: boolean | null;
+  data: Partial<Record<TimeWindow, number>>;
+}
+
+function GrowthChart({ metric }: { metric: SortMetric }) {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme];
+  const screenWidth = Dimensions.get("window").width;
+
+  const q1h = trpc.analytics.getAllEarlyStats.useQuery({ timeWindow: "1h", sortBy: metric, limit: 100 }, { staleTime: 10_000 });
+  const q24h = trpc.analytics.getAllEarlyStats.useQuery({ timeWindow: "24h", sortBy: metric, limit: 100 }, { staleTime: 10_000 });
+  const q48h = trpc.analytics.getAllEarlyStats.useQuery({ timeWindow: "48h", sortBy: metric, limit: 100 }, { staleTime: 10_000 });
+  const q1w = trpc.analytics.getAllEarlyStats.useQuery({ timeWindow: "1week", sortBy: metric, limit: 100 }, { staleTime: 10_000 });
+
+  const isLoading = q1h.isLoading || q24h.isLoading || q48h.isLoading || q1w.isLoading;
+
+  const videoMap = new Map<string, GrowthChartItem>();
+  const addData = (rows: typeof q1h.data, tw: TimeWindow) => {
+    for (const r of rows ?? []) {
+      if (!videoMap.has(r.videoId)) {
+        videoMap.set(r.videoId, { videoId: r.videoId, title: r.title, isShort: r.isShort, data: {} });
+      }
+      const val = metric === "avgWatchTimeSec" && r.duration && r.duration > 0
+        ? Math.min(((r.avgWatchTimeSec ?? 0) / r.duration) * 100, 100)
+        : (r[metric] as number) ?? 0;
+      videoMap.get(r.videoId)!.data[tw] = val;
+    }
+  };
+  addData(q1h.data, "1h");
+  addData(q24h.data, "24h");
+  addData(q48h.data, "48h");
+  addData(q1w.data, "1week");
+
+  const items = Array.from(videoMap.values()).filter(v => Object.keys(v.data).length >= 2);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color="#FF0000" />
+      </View>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
+        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.muted, textAlign: "center" }}>グラフデータがありません</Text>
+        <Text style={{ fontSize: 13, color: colors.muted, marginTop: 6, textAlign: "center" }}>複数タイムウィンドウのデータを入力すると{"\n"}推移グラフが表示されます</Text>
+      </View>
+    );
+  }
+
+  const CHART_W = screenWidth - 32;
+  const CHART_H = 160;
+  const PAD_L = 48;
+  const PAD_R = 12;
+  const PAD_T = 16;
+  const PAD_B = 28;
+  const plotW = CHART_W - PAD_L - PAD_R;
+  const plotH = CHART_H - PAD_T - PAD_B;
+
+  const metricLabel = SORT_METRICS.find(m => m.key === metric)?.label ?? metric;
+  const LINE_COLORS = ["#FF0000", "#3B82F6", "#22C55E", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
+
+  let globalMax = 0;
+  for (const item of items) {
+    for (const v of Object.values(item.data)) {
+      if (v > globalMax) globalMax = v;
+    }
+  }
+  if (globalMax === 0) globalMax = 1;
+
+  const xPos = (twIdx: number) => PAD_L + (twIdx / (CHART_TIME_WINDOWS.length - 1)) * plotW;
+  const yPos = (val: number) => PAD_T + plotH - (val / globalMax) * plotH;
+
+  const formatYLabel = (val: number) => {
+    if (metric === "views" || metric === "impressions") {
+      if (val >= 10000) return `${(val / 10000).toFixed(0)}万`;
+      if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+      return String(Math.round(val));
+    }
+    return `${val.toFixed(1)}%`;
+  };
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1.0].map(r => ({ val: globalMax * r, y: yPos(globalMax * r) }));
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      <Text style={{ fontSize: 13, color: colors.muted, marginBottom: 12 }}>
+        {metricLabel}の推移（1時間 → 24時間 → 48時間 → 1週間）
+      </Text>
+      <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 8, borderWidth: 0.5, borderColor: colors.border, marginBottom: 16 }}>
+        <Svg width={CHART_W} height={CHART_H}>
+          {yTicks.map((t, i) => (
+            <Line key={i} x1={PAD_L} y1={t.y} x2={CHART_W - PAD_R} y2={t.y} stroke={colors.border} strokeWidth={0.5} strokeDasharray="4,3" />
+          ))}
+          {yTicks.map((t, i) => (
+            <SvgText key={i} x={PAD_L - 4} y={t.y + 4} fontSize={9} fill={colors.muted} textAnchor="end">{formatYLabel(t.val)}</SvgText>
+          ))}
+          {CHART_TIME_WINDOWS.map((tw, i) => (
+            <SvgText key={tw} x={xPos(i)} y={CHART_H - 6} fontSize={10} fill={colors.muted} textAnchor="middle">{CHART_WINDOW_LABELS[tw]}</SvgText>
+          ))}
+          {items.slice(0, 8).map((item, lineIdx) => {
+            const pts = CHART_TIME_WINDOWS
+              .map((tw, i) => item.data[tw] != null ? `${xPos(i)},${yPos(item.data[tw]!)}` : null)
+              .filter(Boolean);
+            if (pts.length < 2) return null;
+            return (
+              <Polyline
+                key={item.videoId}
+                points={pts.join(" ")}
+                fill="none"
+                stroke={LINE_COLORS[lineIdx % LINE_COLORS.length]}
+                strokeWidth={1.8}
+                strokeOpacity={0.85}
+              />
+            );
+          })}
+          {items.slice(0, 8).map((item, lineIdx) =>
+            CHART_TIME_WINDOWS.map((tw, i) =>
+              item.data[tw] != null ? (
+                <Circle
+                  key={`${item.videoId}-${tw}`}
+                  cx={xPos(i)}
+                  cy={yPos(item.data[tw]!)}
+                  r={3}
+                  fill={LINE_COLORS[lineIdx % LINE_COLORS.length]}
+                />
+              ) : null
+            )
+          )}
+        </Svg>
+      </View>
+      {items.slice(0, 8).map((item, lineIdx) => (
+        <View key={item.videoId} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 }}>
+          <View style={{ width: 20, height: 3, borderRadius: 2, backgroundColor: LINE_COLORS[lineIdx % LINE_COLORS.length] }} />
+          <Text style={{ fontSize: 11, color: colors.foreground, flex: 1 }} numberOfLines={1}>
+            {item.title ?? item.videoId}
+          </Text>
+        </View>
+      ))}
+      {items.length > 8 && (
+        <Text style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>+ {items.length - 8}本の動画</Text>
+      )}
+    </ScrollView>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function EarlyStatsScreen() {
-  const [activeTab, setActiveTab] = useState<"ranking" | "input">("ranking");
+  const [activeTab, setActiveTab] = useState<"ranking" | "graph" | "input">("ranking");
   const [selectedTimeWindow, setSelectedTimeWindow] = useState<TimeWindow>("24h");
   const [selectedSortMetric, setSelectedSortMetric] = useState<SortMetric>("views");
   const [modalVisible, setModalVisible] = useState(false);
@@ -563,17 +740,25 @@ export default function EarlyStatsScreen() {
           onPress={() => setActiveTab("ranking")}
           style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: activeTab === "ranking" ? "#fff" : "transparent", alignItems: "center" }}
         >
-          <Text style={{ fontSize: 13, fontWeight: "700", color: activeTab === "ranking" ? "#0F0F0F" : "#9CA3AF" }}>ランキング</Text>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: activeTab === "ranking" ? "#0F0F0F" : "#9CA3AF" }}>ランキング</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab("graph")}
+          style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: activeTab === "graph" ? "#fff" : "transparent", alignItems: "center" }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "700", color: activeTab === "graph" ? "#0F0F0F" : "#9CA3AF" }}>推移グラフ</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setActiveTab("input")}
           style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: activeTab === "input" ? "#fff" : "transparent", alignItems: "center" }}
         >
-          <Text style={{ fontSize: 13, fontWeight: "700", color: activeTab === "input" ? "#0F0F0F" : "#9CA3AF" }}>データ入力</Text>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: activeTab === "input" ? "#0F0F0F" : "#9CA3AF" }}>データ入力</Text>
         </TouchableOpacity>
       </View>
 
-      {activeTab === "ranking" ? (
+      {activeTab === "graph" ? (
+        <GrowthChart metric={selectedSortMetric} />
+      ) : activeTab === "ranking" ? (
         <>
           {/* Time window filter - 横並び均等配置 */}
           <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 8, gap: 6 }}>
