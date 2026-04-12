@@ -274,4 +274,4 @@
 - [x] YouTubeサブナビをメインタブバーの上に移動（YouTubeタブ選択時のみ表示）
 
 ## Round 42：タブバー余分表示修正（ユーザー報告）
-- [ ] タブバーにrankings/charts/videos/ai/early-statsが余分に表示される問題を修正（href:nullで非表示）
+- [x] タブバーにrankings/charts/videos/ai/early-statsが余分に表示される問題を修正（href:nullで非表示）
