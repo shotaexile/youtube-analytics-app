@@ -1,41 +1,9 @@
-"use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc3) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc3 = __getOwnPropDesc(from, key)) || desc3.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// api/handler.ts
-var handler_exports = {};
-__export(handler_exports, {
-  default: () => handler_default
-});
-module.exports = __toCommonJS(handler_exports);
-var import_config = require("dotenv/config");
-var import_express = __toESM(require("express"));
-var import_express2 = require("@trpc/server/adapters/express");
+// server/_core/index.ts
+import "dotenv/config";
+import express from "express";
+import { createServer } from "http";
+import net from "net";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 // shared/const.ts
 var COOKIE_NAME = "app_session_id";
@@ -45,119 +13,131 @@ var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 
 // server/db.ts
-var import_drizzle_orm = require("drizzle-orm");
-var import_mysql2 = require("drizzle-orm/mysql2");
+import { eq, desc, asc } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
 
 // drizzle/schema.ts
-var import_mysql_core = require("drizzle-orm/mysql-core");
-var users = (0, import_mysql_core.mysqlTable)("users", {
+import {
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  float,
+  bigint,
+  boolean,
+  date,
+  uniqueIndex
+} from "drizzle-orm/mysql-core";
+var users = mysqlTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
    * Use this for relations between tables.
    */
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
+  id: int("id").autoincrement().primaryKey(),
   /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: (0, import_mysql_core.varchar)("openId", { length: 64 }).notNull().unique(),
-  name: (0, import_mysql_core.text)("name"),
-  email: (0, import_mysql_core.varchar)("email", { length: 320 }),
-  loginMethod: (0, import_mysql_core.varchar)("loginMethod", { length: 64 }),
-  role: (0, import_mysql_core.mysqlEnum)("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: (0, import_mysql_core.timestamp)("lastSignedIn").defaultNow().notNull()
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  name: text("name"),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
 });
-var channelConfig = (0, import_mysql_core.mysqlTable)("channel_config", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  channelName: (0, import_mysql_core.varchar)("channelName", { length: 255 }).notNull().default("ViewCore"),
-  channelUrl: (0, import_mysql_core.varchar)("channelUrl", { length: 512 }).default(""),
-  channelId: (0, import_mysql_core.varchar)("channelId", { length: 128 }).default(""),
-  iconUrl: (0, import_mysql_core.text)("iconUrl"),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var channelConfig = mysqlTable("channel_config", {
+  id: int("id").autoincrement().primaryKey(),
+  channelName: varchar("channelName", { length: 255 }).notNull().default("ViewCore"),
+  channelUrl: varchar("channelUrl", { length: 512 }).default(""),
+  channelId: varchar("channelId", { length: 128 }).default(""),
+  iconUrl: text("iconUrl"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var videos = (0, import_mysql_core.mysqlTable)("videos", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  videoId: (0, import_mysql_core.varchar)("videoId", { length: 64 }).notNull().unique(),
-  title: (0, import_mysql_core.varchar)("title", { length: 512 }).notNull(),
-  publishedAt: (0, import_mysql_core.varchar)("publishedAt", { length: 32 }).notNull(),
-  publishedDate: (0, import_mysql_core.date)("publishedDate").notNull(),
-  duration: (0, import_mysql_core.int)("duration").notNull().default(0),
-  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
-  estimatedRevenue: (0, import_mysql_core.float)("estimatedRevenue").notNull().default(0),
-  impressions: (0, import_mysql_core.bigint)("impressions", { mode: "number" }).notNull().default(0),
-  ctr: (0, import_mysql_core.float)("ctr").notNull().default(0),
-  avgViewRate: (0, import_mysql_core.float)("avgViewRate").notNull().default(0),
-  likeRate: (0, import_mysql_core.float)("likeRate").notNull().default(0),
-  subscriberChange: (0, import_mysql_core.int)("subscriberChange").notNull().default(0),
-  isShort: (0, import_mysql_core.boolean)("isShort").notNull().default(false),
-  isPrivate: (0, import_mysql_core.boolean)("isPrivate").notNull().default(false),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var videos = mysqlTable("videos", {
+  id: int("id").autoincrement().primaryKey(),
+  videoId: varchar("videoId", { length: 64 }).notNull().unique(),
+  title: varchar("title", { length: 512 }).notNull(),
+  publishedAt: varchar("publishedAt", { length: 32 }).notNull(),
+  publishedDate: date("publishedDate").notNull(),
+  duration: int("duration").notNull().default(0),
+  views: bigint("views", { mode: "number" }).notNull().default(0),
+  estimatedRevenue: float("estimatedRevenue").notNull().default(0),
+  impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
+  ctr: float("ctr").notNull().default(0),
+  avgViewRate: float("avgViewRate").notNull().default(0),
+  likeRate: float("likeRate").notNull().default(0),
+  subscriberChange: int("subscriberChange").notNull().default(0),
+  isShort: boolean("isShort").notNull().default(false),
+  isPrivate: boolean("isPrivate").notNull().default(false),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var monthlyStats = (0, import_mysql_core.mysqlTable)("monthly_stats", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  month: (0, import_mysql_core.varchar)("month", { length: 7 }).notNull().unique(),
-  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
-  revenue: (0, import_mysql_core.float)("revenue").notNull().default(0),
-  videoCount: (0, import_mysql_core.int)("videoCount").notNull().default(0),
-  subscriberChange: (0, import_mysql_core.int)("subscriberChange").notNull().default(0),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var monthlyStats = mysqlTable("monthly_stats", {
+  id: int("id").autoincrement().primaryKey(),
+  month: varchar("month", { length: 7 }).notNull().unique(),
+  views: bigint("views", { mode: "number" }).notNull().default(0),
+  revenue: float("revenue").notNull().default(0),
+  videoCount: int("videoCount").notNull().default(0),
+  subscriberChange: int("subscriberChange").notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var csvUploads = (0, import_mysql_core.mysqlTable)("csv_uploads", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  uploadedBy: (0, import_mysql_core.varchar)("uploadedBy", { length: 64 }),
-  videoCount: (0, import_mysql_core.int)("videoCount").notNull().default(0),
-  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull()
+var csvUploads = mysqlTable("csv_uploads", {
+  id: int("id").autoincrement().primaryKey(),
+  uploadedBy: varchar("uploadedBy", { length: 64 }),
+  videoCount: int("videoCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
 });
-var adminSettings = (0, import_mysql_core.mysqlTable)("admin_settings", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  settingKey: (0, import_mysql_core.varchar)("settingKey", { length: 128 }).notNull().unique(),
-  settingValue: (0, import_mysql_core.text)("settingValue"),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var adminSettings = mysqlTable("admin_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
+  settingValue: text("settingValue"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var pushTokens = (0, import_mysql_core.mysqlTable)("push_tokens", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  token: (0, import_mysql_core.varchar)("token", { length: 512 }).notNull().unique(),
-  deviceName: (0, import_mysql_core.varchar)("deviceName", { length: 128 }),
-  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var pushTokens = mysqlTable("push_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 512 }).notNull().unique(),
+  deviceName: varchar("deviceName", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var videoEarlyStats = (0, import_mysql_core.mysqlTable)("video_early_stats", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  videoId: (0, import_mysql_core.varchar)("videoId", { length: 64 }).notNull(),
-  timeWindow: (0, import_mysql_core.mysqlEnum)("timeWindow", ["1h", "24h", "48h", "1week"]).notNull(),
-  views: (0, import_mysql_core.bigint)("views", { mode: "number" }).notNull().default(0),
-  impressions: (0, import_mysql_core.bigint)("impressions", { mode: "number" }).notNull().default(0),
-  ctr: (0, import_mysql_core.float)("ctr").notNull().default(0),
-  avgViewRate: (0, import_mysql_core.float)("avgViewRate").notNull().default(0),
-  avgWatchTimeSec: (0, import_mysql_core.int)("avgWatchTimeSec").notNull().default(0),
-  likeRate: (0, import_mysql_core.float)("likeRate").notNull().default(0),
-  recordedAt: (0, import_mysql_core.timestamp)("recordedAt").defaultNow().notNull(),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var videoEarlyStats = mysqlTable("video_early_stats", {
+  id: int("id").autoincrement().primaryKey(),
+  videoId: varchar("videoId", { length: 64 }).notNull(),
+  timeWindow: mysqlEnum("timeWindow", ["1h", "24h", "48h", "1week"]).notNull(),
+  views: bigint("views", { mode: "number" }).notNull().default(0),
+  impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
+  ctr: float("ctr").notNull().default(0),
+  avgViewRate: float("avgViewRate").notNull().default(0),
+  avgWatchTimeSec: int("avgWatchTimeSec").notNull().default(0),
+  likeRate: float("likeRate").notNull().default(0),
+  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 }, (table) => ({
-  uqVideoTimeWindow: (0, import_mysql_core.uniqueIndex)("uq_video_timewindow").on(table.videoId, table.timeWindow)
+  uqVideoTimeWindow: uniqueIndex("uq_video_timewindow").on(table.videoId, table.timeWindow)
 }));
-var aiDailyReport = (0, import_mysql_core.mysqlTable)("ai_daily_report", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  reportDate: (0, import_mysql_core.date)("reportDate").notNull().unique(),
+var aiDailyReport = mysqlTable("ai_daily_report", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: date("reportDate").notNull().unique(),
   // JSON string: { title, summary, source, category }[]
-  latestNews: (0, import_mysql_core.text)("latestNews"),
+  latestNews: text("latestNews"),
   // JSON string: { rank, toolName, category, description, examples }[]
-  toolRankings: (0, import_mysql_core.text)("toolRankings"),
+  toolRankings: text("toolRankings"),
   // JSON string: { toolName, category, useCases, tips }[]
-  videoAiTools: (0, import_mysql_core.text)("videoAiTools"),
+  videoAiTools: text("videoAiTools"),
   // JSON string: { title, url, publishedAt }[] from ledge.ai
-  ledgeNews: (0, import_mysql_core.text)("ledgeNews"),
-  generatedAt: (0, import_mysql_core.timestamp)("generatedAt").defaultNow().notNull(),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+  ledgeNews: text("ledgeNews"),
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
-var infoSources = (0, import_mysql_core.mysqlTable)("info_sources", {
-  id: (0, import_mysql_core.int)("id").autoincrement().primaryKey(),
-  category: (0, import_mysql_core.mysqlEnum)("category", ["youtube", "x", "website"]).notNull().default("website"),
-  title: (0, import_mysql_core.varchar)("title", { length: 255 }).notNull(),
-  url: (0, import_mysql_core.varchar)("url", { length: 512 }).notNull(),
-  memo: (0, import_mysql_core.text)("memo"),
-  sortOrder: (0, import_mysql_core.int)("sortOrder").notNull().default(0),
-  createdAt: (0, import_mysql_core.timestamp)("createdAt").defaultNow().notNull(),
-  updatedAt: (0, import_mysql_core.timestamp)("updatedAt").defaultNow().onUpdateNow().notNull()
+var infoSources = mysqlTable("info_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  category: mysqlEnum("category", ["youtube", "x", "website"]).notNull().default("website"),
+  title: varchar("title", { length: 255 }).notNull(),
+  url: varchar("url", { length: 512 }).notNull(),
+  memo: text("memo"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 
 // server/_core/env.ts
@@ -177,7 +157,7 @@ var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = (0, import_mysql2.drizzle)(process.env.DATABASE_URL);
+      _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -239,19 +219,19 @@ async function getUserByOpenId(openId) {
     console.warn("[Database] Cannot get user: database not available");
     return void 0;
   }
-  const result = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.openId, openId)).limit(1);
+  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function getLatestAiDailyReport() {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(aiDailyReport).orderBy((0, import_drizzle_orm.desc)(aiDailyReport.reportDate)).limit(1);
+  const rows = await db.select().from(aiDailyReport).orderBy(desc(aiDailyReport.reportDate)).limit(1);
   return rows[0] ?? null;
 }
 async function getInfoSources() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(infoSources).orderBy((0, import_drizzle_orm.asc)(infoSources.category), (0, import_drizzle_orm.asc)(infoSources.sortOrder), (0, import_drizzle_orm.asc)(infoSources.id));
+  return db.select().from(infoSources).orderBy(asc(infoSources.category), asc(infoSources.sortOrder), asc(infoSources.id));
 }
 async function addInfoSource(data) {
   const db = await getDb();
@@ -268,12 +248,12 @@ async function addInfoSource(data) {
 async function updateInfoSourceMemo(id, memo) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.update(infoSources).set({ memo }).where((0, import_drizzle_orm.eq)(infoSources.id, id));
+  return db.update(infoSources).set({ memo }).where(eq(infoSources.id, id));
 }
 async function deleteInfoSource(id) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.delete(infoSources).where((0, import_drizzle_orm.eq)(infoSources.id, id));
+  return db.delete(infoSources).where(eq(infoSources.id, id));
 }
 async function seedDefaultInfoSources() {
   const db = await getDb();
@@ -303,14 +283,14 @@ async function upsertAiDailyReport(data) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const dateStr = data.reportDate instanceof Date ? data.reportDate.toISOString().split("T")[0] : String(data.reportDate);
-  const existing = await db.select({ id: aiDailyReport.id }).from(aiDailyReport).where((0, import_drizzle_orm.eq)(aiDailyReport.reportDate, dateStr)).limit(1);
+  const existing = await db.select({ id: aiDailyReport.id }).from(aiDailyReport).where(eq(aiDailyReport.reportDate, dateStr)).limit(1);
   if (existing.length > 0) {
     await db.update(aiDailyReport).set({
       latestNews: data.latestNews,
       toolRankings: data.toolRankings,
       videoAiTools: data.videoAiTools,
       generatedAt: /* @__PURE__ */ new Date()
-    }).where((0, import_drizzle_orm.eq)(aiDailyReport.id, existing[0].id));
+    }).where(eq(aiDailyReport.id, existing[0].id));
   } else {
     await db.insert(aiDailyReport).values(data);
   }
@@ -362,9 +342,9 @@ var HttpError = class extends Error {
 var ForbiddenError = (msg) => new HttpError(403, msg);
 
 // server/_core/sdk.ts
-var import_axios = __toESM(require("axios"));
-var import_cookie = require("cookie");
-var import_jose = require("jose");
+import axios from "axios";
+import { parse as parseCookieHeader } from "cookie";
+import { SignJWT, jwtVerify } from "jose";
 var isNonEmptyString = (value) => typeof value === "string" && value.length > 0;
 var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
@@ -400,7 +380,7 @@ var OAuthService = class {
     return data;
   }
 };
-var createOAuthHttpClient = () => import_axios.default.create({
+var createOAuthHttpClient = () => axios.create({
   baseURL: ENV.oAuthServerUrl,
   timeout: AXIOS_TIMEOUT_MS
 });
@@ -455,7 +435,7 @@ var SDKServer = class {
     if (!cookieHeader) {
       return /* @__PURE__ */ new Map();
     }
-    const parsed = (0, import_cookie.parse)(cookieHeader);
+    const parsed = parseCookieHeader(cookieHeader);
     return new Map(Object.entries(parsed));
   }
   getSessionSecret() {
@@ -482,7 +462,7 @@ var SDKServer = class {
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
     const secretKey = this.getSessionSecret();
-    return new import_jose.SignJWT({
+    return new SignJWT({
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name
@@ -495,7 +475,7 @@ var SDKServer = class {
     }
     try {
       const secretKey = this.getSessionSecret();
-      const { payload } = await (0, import_jose.jwtVerify)(cookieValue, secretKey, {
+      const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
@@ -611,8 +591,8 @@ function buildUserResponse(user) {
     lastSignedIn: (user?.lastSignedIn ?? /* @__PURE__ */ new Date()).toISOString()
   };
 }
-function registerOAuthRoutes(app2) {
-  app2.get("/api/oauth/callback", async (req, res) => {
+function registerOAuthRoutes(app) {
+  app.get("/api/oauth/callback", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
     if (!code || !state) {
@@ -636,7 +616,7 @@ function registerOAuthRoutes(app2) {
       res.status(500).json({ error: "OAuth callback failed" });
     }
   });
-  app2.get("/api/oauth/mobile", async (req, res) => {
+  app.get("/api/oauth/mobile", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
     if (!code || !state) {
@@ -662,12 +642,12 @@ function registerOAuthRoutes(app2) {
       res.status(500).json({ error: "OAuth mobile exchange failed" });
     }
   });
-  app2.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", (req, res) => {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     res.json({ success: true });
   });
-  app2.get("/api/auth/me", async (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
       res.json({ user: buildUserResponse(user) });
@@ -676,7 +656,7 @@ function registerOAuthRoutes(app2) {
       res.status(401).json({ error: "Not authenticated", user: null });
     }
   });
-  app2.post("/api/auth/session", async (req, res) => {
+  app.post("/api/auth/session", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
       const authHeader = req.headers.authorization || req.headers.Authorization;
@@ -696,10 +676,10 @@ function registerOAuthRoutes(app2) {
 }
 
 // server/_core/systemRouter.ts
-var import_zod = require("zod");
+import { z } from "zod";
 
 // server/_core/notification.ts
-var import_server = require("@trpc/server");
+import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
 var trimValue = (value) => value.trim();
@@ -710,13 +690,13 @@ var buildEndpointUrl = (baseUrl) => {
 };
 var validatePayload = (input) => {
   if (!isNonEmptyString2(input.title)) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Notification title is required."
     });
   }
   if (!isNonEmptyString2(input.content)) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Notification content is required."
     });
@@ -724,13 +704,13 @@ var validatePayload = (input) => {
   const title = trimValue(input.title);
   const content = trimValue(input.content);
   if (title.length > TITLE_MAX_LENGTH) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "BAD_REQUEST",
       message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`
     });
   }
   if (content.length > CONTENT_MAX_LENGTH) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "BAD_REQUEST",
       message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`
     });
@@ -740,13 +720,13 @@ var validatePayload = (input) => {
 async function notifyOwner(payload) {
   const { title, content } = validatePayload(payload);
   if (!ENV.forgeApiUrl) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Notification service URL is not configured."
     });
   }
   if (!ENV.forgeApiKey) {
-    throw new import_server.TRPCError({
+    throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Notification service API key is not configured."
     });
@@ -778,17 +758,17 @@ async function notifyOwner(payload) {
 }
 
 // server/_core/trpc.ts
-var import_server2 = require("@trpc/server");
-var import_superjson = __toESM(require("superjson"));
-var t = import_server2.initTRPC.context().create({
-  transformer: import_superjson.default
+import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import superjson from "superjson";
+var t = initTRPC.context().create({
+  transformer: superjson
 });
 var router = t.router;
 var publicProcedure = t.procedure;
 var requireUser = t.middleware(async (opts) => {
   const { ctx, next } = opts;
   if (!ctx.user) {
-    throw new import_server2.TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
   return next({
     ctx: {
@@ -802,7 +782,7 @@ var adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {
     const { ctx, next } = opts;
     if (!ctx.user || ctx.user.role !== "admin") {
-      throw new import_server2.TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({
       ctx: {
@@ -816,16 +796,16 @@ var adminProcedure = t.procedure.use(
 // server/_core/systemRouter.ts
 var systemRouter = router({
   health: publicProcedure.input(
-    import_zod.z.object({
-      timestamp: import_zod.z.number().min(0, "timestamp cannot be negative")
+    z.object({
+      timestamp: z.number().min(0, "timestamp cannot be negative")
     })
   ).query(() => ({
     ok: true
   })),
   notifyOwner: adminProcedure.input(
-    import_zod.z.object({
-      title: import_zod.z.string().min(1, "title is required"),
-      content: import_zod.z.string().min(1, "content is required")
+    z.object({
+      title: z.string().min(1, "title is required"),
+      content: z.string().min(1, "content is required")
     })
   ).mutation(async ({ input }) => {
     const delivered = await notifyOwner(input);
@@ -836,10 +816,10 @@ var systemRouter = router({
 });
 
 // server/routers.ts
-var import_zod4 = require("zod");
+import { z as z4 } from "zod";
 
 // server/analytics-router.ts
-var import_zod2 = require("zod");
+import { z as z2 } from "zod";
 
 // server/_core/openai.ts
 var OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -947,8 +927,8 @@ function formatRelativeTime(isoDate) {
 }
 
 // server/analytics-router.ts
-var import_drizzle_orm2 = require("drizzle-orm");
-var crypto = __toESM(require("crypto"));
+import { eq as eq2, desc as desc2, asc as asc2, and } from "drizzle-orm";
+import * as crypto from "crypto";
 async function sendExpoPushNotifications(tokens, title, body) {
   if (tokens.length === 0) return;
   const messages = tokens.map((token) => ({
@@ -1139,7 +1119,7 @@ async function checkPrivacyInBatches(videoIds, batchSize = 20) {
 }
 var analyticsRouter = router({
   // Upload CSV and store to DB
-  uploadCSV: publicProcedure.input(import_zod2.z.object({ csvContent: import_zod2.z.string(), uploadedBy: import_zod2.z.string().optional() })).mutation(async ({ input }) => {
+  uploadCSV: publicProcedure.input(z2.object({ csvContent: z2.string(), uploadedBy: z2.string().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const videoRows = parseCSVToVideos(input.csvContent);
@@ -1198,12 +1178,12 @@ var analyticsRouter = router({
   }),
   // Get all videos
   getVideos: publicProcedure.input(
-    import_zod2.z.object({
-      filter: import_zod2.z.enum(["all", "regular", "short", "private"]).optional(),
-      sortBy: import_zod2.z.enum(["views", "estimatedRevenue", "publishedDate", "ctr", "likeRate", "avgViewRate", "subscriberChange", "impressions"]).optional(),
-      sortOrder: import_zod2.z.enum(["asc", "desc"]).optional(),
-      limit: import_zod2.z.number().optional(),
-      offset: import_zod2.z.number().optional()
+    z2.object({
+      filter: z2.enum(["all", "regular", "short", "private"]).optional(),
+      sortBy: z2.enum(["views", "estimatedRevenue", "publishedDate", "ctr", "likeRate", "avgViewRate", "subscriberChange", "impressions"]).optional(),
+      sortOrder: z2.enum(["asc", "desc"]).optional(),
+      limit: z2.number().optional(),
+      offset: z2.number().optional()
     }).optional()
   ).query(async ({ input }) => {
     const db = await getDb();
@@ -1211,11 +1191,11 @@ var analyticsRouter = router({
     const { filter = "all", sortBy = "publishedDate", sortOrder = "desc", limit = 600, offset = 0 } = input || {};
     let baseQuery = db.select().from(videos).$dynamic();
     if (filter === "regular") {
-      baseQuery = baseQuery.where((0, import_drizzle_orm2.and)((0, import_drizzle_orm2.eq)(videos.isShort, false), (0, import_drizzle_orm2.eq)(videos.isPrivate, false)));
+      baseQuery = baseQuery.where(and(eq2(videos.isShort, false), eq2(videos.isPrivate, false)));
     } else if (filter === "short") {
-      baseQuery = baseQuery.where((0, import_drizzle_orm2.eq)(videos.isShort, true));
+      baseQuery = baseQuery.where(eq2(videos.isShort, true));
     } else if (filter === "private") {
-      baseQuery = baseQuery.where((0, import_drizzle_orm2.eq)(videos.isPrivate, true));
+      baseQuery = baseQuery.where(eq2(videos.isPrivate, true));
     }
     const colMap = {
       views: videos.views,
@@ -1228,15 +1208,15 @@ var analyticsRouter = router({
       impressions: videos.impressions
     };
     const col = colMap[sortBy] || videos.publishedDate;
-    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? (0, import_drizzle_orm2.asc)(col) : (0, import_drizzle_orm2.desc)(col));
+    baseQuery = baseQuery.orderBy(sortOrder === "asc" ? asc2(col) : desc2(col));
     return baseQuery.limit(limit).offset(offset);
   }),
   // Get monthly stats
-  getMonthlyStats: publicProcedure.input(import_zod2.z.object({ months: import_zod2.z.number().optional() }).optional()).query(async ({ input }) => {
+  getMonthlyStats: publicProcedure.input(z2.object({ months: z2.number().optional() }).optional()).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
     const { months = 24 } = input || {};
-    const rows = await db.select().from(monthlyStats).orderBy((0, import_drizzle_orm2.desc)(monthlyStats.month)).limit(months);
+    const rows = await db.select().from(monthlyStats).orderBy(desc2(monthlyStats.month)).limit(months);
     return rows.reverse();
   }),
   // Get channel summary (aggregated)
@@ -1272,11 +1252,11 @@ var analyticsRouter = router({
   }),
   // Save channel config
   saveChannelConfig: publicProcedure.input(
-    import_zod2.z.object({
-      channelName: import_zod2.z.string(),
-      channelUrl: import_zod2.z.string().optional(),
-      channelId: import_zod2.z.string().optional(),
-      iconUrl: import_zod2.z.string().optional()
+    z2.object({
+      channelName: z2.string(),
+      channelUrl: z2.string().optional(),
+      channelId: z2.string().optional(),
+      iconUrl: z2.string().optional()
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
@@ -1304,27 +1284,27 @@ var analyticsRouter = router({
   hasAdminPassword: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return false;
-    const rows = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
+    const rows = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
     return rows.length > 0 && !!rows[0].settingValue;
   }),
   // Set admin password (first time or reset)
-  setAdminPassword: publicProcedure.input(import_zod2.z.object({ password: import_zod2.z.string().min(4) })).mutation(async ({ input }) => {
+  setAdminPassword: publicProcedure.input(z2.object({ password: z2.string().min(4) })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const hash = crypto.createHash("sha256").update(input.password).digest("hex");
-    const existing = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
+    const existing = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
     if (existing.length > 0) {
-      await db.update(adminSettings).set({ settingValue: hash }).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
+      await db.update(adminSettings).set({ settingValue: hash }).where(eq2(adminSettings.settingKey, "admin_password_hash"));
     } else {
       await db.insert(adminSettings).values({ settingKey: "admin_password_hash", settingValue: hash });
     }
     return { success: true };
   }),
   // Verify admin password
-  verifyAdminPassword: publicProcedure.input(import_zod2.z.object({ password: import_zod2.z.string() })).mutation(async ({ input }) => {
+  verifyAdminPassword: publicProcedure.input(z2.object({ password: z2.string() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    const rows = await db.select().from(adminSettings).where((0, import_drizzle_orm2.eq)(adminSettings.settingKey, "admin_password_hash"));
+    const rows = await db.select().from(adminSettings).where(eq2(adminSettings.settingKey, "admin_password_hash"));
     if (rows.length === 0 || !rows[0].settingValue) {
       return { valid: true };
     }
@@ -1333,7 +1313,7 @@ var analyticsRouter = router({
   }),
   // ── Push token management ─────────────────────────────────────────────────
   // Register push token
-  registerPushToken: publicProcedure.input(import_zod2.z.object({ token: import_zod2.z.string(), deviceName: import_zod2.z.string().optional() })).mutation(async ({ input }) => {
+  registerPushToken: publicProcedure.input(z2.object({ token: z2.string(), deviceName: z2.string().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return { success: false };
     await db.insert(pushTokens).values({ token: input.token, deviceName: input.deviceName || null }).onDuplicateKeyUpdate({ set: { deviceName: input.deviceName || null } });
@@ -1350,17 +1330,17 @@ var analyticsRouter = router({
   getLastUpload: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return null;
-    const rows = await db.select().from(csvUploads).orderBy((0, import_drizzle_orm2.desc)(csvUploads.createdAt)).limit(1);
+    const rows = await db.select().from(csvUploads).orderBy(desc2(csvUploads.createdAt)).limit(1);
     return rows[0] || null;
   }),
   // ── AI Bot ────────────────────────────────────────────────────────────────
   // Answer questions about the channel analytics using LLM
-  askBot: publicProcedure.input(import_zod2.z.object({ question: import_zod2.z.string().max(500) })).mutation(async ({ input }) => {
+  askBot: publicProcedure.input(z2.object({ question: z2.string().max(500) })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    const allVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.publishedDate));
+    const allVideos = await db.select().from(videos).orderBy(desc2(videos.publishedDate));
     if (allVideos.length === 0) throw new Error("\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002CSV\u3092\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    const allMonthly = await db.select().from(monthlyStats).orderBy((0, import_drizzle_orm2.asc)(monthlyStats.month));
+    const allMonthly = await db.select().from(monthlyStats).orderBy(asc2(monthlyStats.month));
     const channelRows = await db.select().from(channelConfig).limit(1);
     const channel = channelRows[0];
     const totalVideos = allVideos.length;
@@ -1413,7 +1393,7 @@ ${recent5.join("\n")}`;
   }),
   // ── トレンド企画提案システム ─────────────────────────────────────────────────
   // 日本のYouTubeトレンド動画を取得
-  getTrendingVideos: publicProcedure.input(import_zod2.z.object({ category: import_zod2.z.string().optional() })).query(async ({ input }) => {
+  getTrendingVideos: publicProcedure.input(z2.object({ category: z2.string().optional() })).query(async ({ input }) => {
     const categories = [
       { label: "\u30D3\u30B8\u30CD\u30B9\u30FB\u304A\u91D1", query: "\u65E5\u672C \u30D3\u30B8\u30CD\u30B9 \u304A\u91D1 \u7A3C\u3050 2026" },
       { label: "\u66B4\u9732\u30FB\u708E\u4E0A", query: "\u65E5\u672C \u66B4\u9732 \u708E\u4E0A \u771F\u76F8 2026" },
@@ -1434,18 +1414,18 @@ ${recent5.join("\n")}`;
     return { trends: results };
   }),
   // AI企画提案を生成
-  generateIdeas: publicProcedure.input(import_zod2.z.object({
-    selectedTrends: import_zod2.z.array(import_zod2.z.object({
-      title: import_zod2.z.string(),
-      category: import_zod2.z.string(),
-      views: import_zod2.z.string().optional()
+  generateIdeas: publicProcedure.input(z2.object({
+    selectedTrends: z2.array(z2.object({
+      title: z2.string(),
+      category: z2.string(),
+      views: z2.string().optional()
     })),
-    focusCategory: import_zod2.z.string().optional()
+    focusCategory: z2.string().optional()
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return { ideas: [], rawText: "", error: "DB not available" };
-    const topVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.views)).limit(30);
-    const highCtrVideos = await db.select().from(videos).orderBy((0, import_drizzle_orm2.desc)(videos.ctr)).limit(20);
+    const topVideos = await db.select().from(videos).orderBy(desc2(videos.views)).limit(30);
+    const highCtrVideos = await db.select().from(videos).orderBy(desc2(videos.ctr)).limit(20);
     const channel = await db.select().from(channelConfig).limit(1).then((r) => r[0]);
     const topTitles = topVideos.slice(0, 10).map(
       (v) => `\u300C${v.title}\u300D(${(v.views || 0).toLocaleString()}\u56DE, CTR ${((v.ctr || 0) * 100).toFixed(1)}%)`
@@ -1509,7 +1489,7 @@ ${trendContext}
     }
   }),
   // 特定のトレンドキーワードで深掘り検索
-  searchTrendDetail: publicProcedure.input(import_zod2.z.object({ keyword: import_zod2.z.string() })).query(async ({ input }) => {
+  searchTrendDetail: publicProcedure.input(z2.object({ keyword: z2.string() })).query(async ({ input }) => {
     try {
       const items = await searchYouTube(input.keyword + " \u65E5\u672C", 10);
       return { videos: items };
@@ -1519,15 +1499,15 @@ ${trendContext}
   }),
   // ── 初速データ（Early Stats）API ────────────────────────────────────────────
   // 初速データを保存・更新
-  saveEarlyStats: publicProcedure.input(import_zod2.z.object({
-    videoId: import_zod2.z.string(),
-    timeWindow: import_zod2.z.enum(["1h", "24h", "48h", "1week"]),
-    views: import_zod2.z.number().min(0),
-    impressions: import_zod2.z.number().min(0),
-    ctr: import_zod2.z.number().min(0),
-    avgViewRate: import_zod2.z.number().min(0),
-    avgWatchTimeSec: import_zod2.z.number().min(0).optional().default(0),
-    likeRate: import_zod2.z.number().min(0)
+  saveEarlyStats: publicProcedure.input(z2.object({
+    videoId: z2.string(),
+    timeWindow: z2.enum(["1h", "24h", "48h", "1week"]),
+    views: z2.number().min(0),
+    impressions: z2.number().min(0),
+    ctr: z2.number().min(0),
+    avgViewRate: z2.number().min(0),
+    avgWatchTimeSec: z2.number().min(0).optional().default(0),
+    likeRate: z2.number().min(0)
   })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -1553,17 +1533,17 @@ ${trendContext}
     return { success: true };
   }),
   // 特定動画の初速データを取得
-  getEarlyStats: publicProcedure.input(import_zod2.z.object({ videoId: import_zod2.z.string() })).query(async ({ input }) => {
+  getEarlyStats: publicProcedure.input(z2.object({ videoId: z2.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
-    const rows = await db.select().from(videoEarlyStats).where((0, import_drizzle_orm2.eq)(videoEarlyStats.videoId, input.videoId)).orderBy((0, import_drizzle_orm2.asc)(videoEarlyStats.timeWindow));
+    const rows = await db.select().from(videoEarlyStats).where(eq2(videoEarlyStats.videoId, input.videoId)).orderBy(asc2(videoEarlyStats.timeWindow));
     return rows;
   }),
   // 全動画の初速データ一覧（ランキング用）
-  getAllEarlyStats: publicProcedure.input(import_zod2.z.object({
-    timeWindow: import_zod2.z.enum(["1h", "24h", "48h", "1week"]).optional(),
-    sortBy: import_zod2.z.enum(["views", "impressions", "ctr", "avgViewRate", "avgWatchTimeSec", "likeRate"]).optional(),
-    limit: import_zod2.z.number().min(1).max(200).optional()
+  getAllEarlyStats: publicProcedure.input(z2.object({
+    timeWindow: z2.enum(["1h", "24h", "48h", "1week"]).optional(),
+    sortBy: z2.enum(["views", "impressions", "ctr", "avgViewRate", "avgWatchTimeSec", "likeRate"]).optional(),
+    limit: z2.number().min(1).max(200).optional()
   })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
@@ -1585,25 +1565,25 @@ ${trendContext}
       isShort: videos.isShort,
       finalViews: videos.views,
       duration: videos.duration
-    }).from(videoEarlyStats).leftJoin(videos, (0, import_drizzle_orm2.eq)(videoEarlyStats.videoId, videos.videoId)).where((0, import_drizzle_orm2.eq)(videoEarlyStats.timeWindow, tw)).orderBy((0, import_drizzle_orm2.desc)(videoEarlyStats.views)).limit(limit);
+    }).from(videoEarlyStats).leftJoin(videos, eq2(videoEarlyStats.videoId, videos.videoId)).where(eq2(videoEarlyStats.timeWindow, tw)).orderBy(desc2(videoEarlyStats.views)).limit(limit);
     return rows;
   }),
   // 初速データを削除
-  deleteEarlyStats: publicProcedure.input(import_zod2.z.object({ id: import_zod2.z.number() })).mutation(async ({ input }) => {
+  deleteEarlyStats: publicProcedure.input(z2.object({ id: z2.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    await db.delete(videoEarlyStats).where((0, import_drizzle_orm2.eq)(videoEarlyStats.id, input.id));
+    await db.delete(videoEarlyStats).where(eq2(videoEarlyStats.id, input.id));
     return { success: true };
   }),
   // DBのavgViewRateとlikeRateを入れ替える修正エンドポイント
-  fixSwappedRates: publicProcedure.input(import_zod2.z.object({ secret: import_zod2.z.string() })).mutation(async ({ input }) => {
+  fixSwappedRates: publicProcedure.input(z2.object({ secret: z2.string() })).mutation(async ({ input }) => {
     if (input.secret !== "fix-swap-2026") throw new Error("Unauthorized");
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const allVideos = await db.select().from(videos);
     let updated = 0;
     for (const v of allVideos) {
-      await db.update(videos).set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate }).where((0, import_drizzle_orm2.eq)(videos.id, v.id));
+      await db.update(videos).set({ avgViewRate: v.likeRate, likeRate: v.avgViewRate }).where(eq2(videos.id, v.id));
       updated++;
     }
     return { success: true, updated };
@@ -1764,7 +1744,7 @@ async function invokeLLM(params) {
 }
 
 // server/ai-info-router.ts
-var import_zod3 = require("zod");
+import { z as z3 } from "zod";
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/g, (e) => {
     const map = {
@@ -2188,29 +2168,29 @@ var aiInfoRouter = router({
     return getInfoSources();
   }),
   /** Add a new info source */
-  addInfoSource: publicProcedure.input(import_zod3.z.object({
-    category: import_zod3.z.enum(["youtube", "x", "website"]),
-    title: import_zod3.z.string().min(1).max(255),
-    url: import_zod3.z.string().url(),
-    memo: import_zod3.z.string().optional()
+  addInfoSource: publicProcedure.input(z3.object({
+    category: z3.enum(["youtube", "x", "website"]),
+    title: z3.string().min(1).max(255),
+    url: z3.string().url(),
+    memo: z3.string().optional()
   })).mutation(async ({ input }) => {
     return addInfoSource(input);
   }),
   /** Update memo for an info source */
-  updateInfoSourceMemo: publicProcedure.input(import_zod3.z.object({
-    id: import_zod3.z.number(),
-    memo: import_zod3.z.string()
+  updateInfoSourceMemo: publicProcedure.input(z3.object({
+    id: z3.number(),
+    memo: z3.string()
   })).mutation(async ({ input }) => {
     return updateInfoSourceMemo(input.id, input.memo);
   }),
   /** Delete an info source */
-  deleteInfoSource: publicProcedure.input(import_zod3.z.object({ id: import_zod3.z.number() })).mutation(async ({ input }) => {
+  deleteInfoSource: publicProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     return deleteInfoSource(input.id);
   }),
   /**
    * Verify admin password for generating reports manually.
    */
-  verifyAdminPassword: publicProcedure.input(import_zod3.z.object({ password: import_zod3.z.string() })).mutation(async ({ input }) => {
+  verifyAdminPassword: publicProcedure.input(z3.object({ password: z3.string() })).mutation(async ({ input }) => {
     const expectedPassword = process.env.ADMIN_GENERATE_PASSWORD;
     if (!expectedPassword) return { valid: false };
     return { valid: input.password === expectedPassword };
@@ -2264,7 +2244,7 @@ var appRouter = router({
   }),
   youtube: router({
     // Fetch channel info (name + avatar) from YouTube's internal API
-    channelInfo: publicProcedure.input(import_zod4.z.object({ channelUrl: import_zod4.z.string() })).query(async ({ input }) => {
+    channelInfo: publicProcedure.input(z4.object({ channelUrl: z4.string() })).query(async ({ input }) => {
       const { channelUrl } = input;
       let browseId = "";
       let handle = "";
@@ -2380,36 +2360,92 @@ async function createContext(opts) {
   };
 }
 
-// api/handler.ts
-var app = (0, import_express.default)();
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.header("Access-Control-Allow-Origin", origin);
+// server/_core/index.ts
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(port, () => {
+      server.close(() => resolve(true));
+    });
+    server.on("error", () => resolve(false));
+  });
+}
+async function findAvailablePort(startPort = 3e3) {
+  for (let port = startPort; port < startPort + 20; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
   }
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  throw new Error(`No available port found starting from ${startPort}`);
+}
+async function startServer() {
+  const app = express();
+  const server = createServer(app);
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    );
+    res.header("Access-Control-Allow-Credentials", "true");
+    if (req.method === "OPTIONS") {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerOAuthRoutes(app);
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true, timestamp: Date.now() });
+  });
+  app.post("/api/ai-info/push", async (req, res) => {
+    try {
+      const apiKey = req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
+      const expectedKey = process.env.MANUS_PUSH_API_KEY;
+      if (expectedKey && apiKey !== expectedKey) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const { latestNews, toolRankings, videoAiTools, reportDate } = req.body;
+      if (!latestNews && !toolRankings && !videoAiTools) {
+        res.status(400).json({ error: "No data provided" });
+        return;
+      }
+      const today = reportDate ? new Date(reportDate) : /* @__PURE__ */ new Date();
+      await upsertAiDailyReport({
+        reportDate: today,
+        latestNews: typeof latestNews === "string" ? latestNews : JSON.stringify(latestNews ?? []),
+        toolRankings: typeof toolRankings === "string" ? toolRankings : JSON.stringify(toolRankings ?? []),
+        videoAiTools: typeof videoAiTools === "string" ? videoAiTools : JSON.stringify(videoAiTools ?? []),
+        generatedAt: /* @__PURE__ */ new Date()
+      });
+      console.log(`[manus-push] AI info saved for ${today.toISOString().split("T")[0]}`);
+      res.json({ success: true, savedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    } catch (err) {
+      console.error("[manus-push] Error:", err);
+      res.status(500).json({ error: String(err) });
+    }
+  });
+  app.use(
+    "/api/trpc",
+    createExpressMiddleware({
+      router: appRouter,
+      createContext
+    })
   );
-  res.header("Access-Control-Allow-Credentials", "true");
-  if (req.method === "OPTIONS") {
-    res.sendStatus(200);
-    return;
+  const preferredPort = parseInt(process.env.PORT || "3000");
+  const port = await findAvailablePort(preferredPort);
+  if (port !== preferredPort) {
+    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
-  next();
-});
-app.use(import_express.default.json({ limit: "50mb" }));
-app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
-registerOAuthRoutes(app);
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, timestamp: Date.now() });
-});
-app.use(
-  "/api/trpc",
-  (0, import_express2.createExpressMiddleware)({
-    router: appRouter,
-    createContext
-  })
-);
-var handler_default = app;
+  server.listen(port, () => {
+    console.log(`[api] server listening on port ${port}`);
+  });
+}
+startServer().catch(console.error);
