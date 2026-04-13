@@ -2,11 +2,16 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { upsertAiDailyReport } from "../db";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -54,6 +59,11 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // ─── Static file serving from dist/ ──────────────────────────────────────
+  // Serve Expo Web build output. index: false so SPA fallback handles /
+  const distPath = path.resolve(process.cwd(), "dist");
+  app.use(express.static(distPath, { index: false }));
 
   registerOAuthRoutes(app);
 
@@ -105,6 +115,21 @@ async function startServer() {
       createContext,
     }),
   );
+
+  // ─── SPA Fallback ─────────────────────────────────────────────────────────
+  // All non-API requests return index.html for client-side routing
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(path.resolve(distPath, "index.html"), (err) => {
+      if (err) {
+        console.error("[static] index.html not found:", err.message, "distPath:", distPath);
+        res.status(404).json({ error: "index.html not found", distPath, cwd: process.cwd() });
+      }
+    });
+  });
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);

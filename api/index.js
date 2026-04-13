@@ -3,6 +3,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 // shared/const.ts
@@ -2361,6 +2363,8 @@ async function createContext(opts) {
 }
 
 // server/_core/index.ts
+var __filename = fileURLToPath(import.meta.url);
+var __dirname = path.dirname(__filename);
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -2400,6 +2404,8 @@ async function startServer() {
   });
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  const distPath = path.resolve(process.cwd(), "dist");
+  app.use(express.static(distPath, { index: false }));
   registerOAuthRoutes(app);
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
@@ -2439,6 +2445,18 @@ async function startServer() {
       createContext
     })
   );
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(path.resolve(distPath, "index.html"), (err) => {
+      if (err) {
+        console.error("[static] index.html not found:", err.message, "distPath:", distPath);
+        res.status(404).json({ error: "index.html not found", distPath, cwd: process.cwd() });
+      }
+    });
+  });
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
   if (port !== preferredPort) {
